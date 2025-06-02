@@ -588,7 +588,7 @@ async def register_user(
 @app.post("/api/auth/login")
 async def login(user_data: UserLogin):
     user = await db.users.find_one({"email": user_data.email})
-    if not user or not verify_password(user_data.password, user["password"]):
+    if not user or not verify_password(user_data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     
     access_token_expires = timedelta(days=30)
