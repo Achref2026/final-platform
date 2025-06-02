@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import VideoCall from './components/VideoCall';
+import DocumentUpload from './components/DocumentUpload';
+import DocumentList from './components/DocumentList';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 
