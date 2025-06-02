@@ -478,51 +478,112 @@ async def health_check():
 async def get_states():
     return {"states": ALGERIAN_STATES}
 
-@app.post("/api/auth/register")
-async def register(user_data: UserCreate):
-    # Check if user exists
-    existing_user = await db.users.find_one({"email": user_data.email})
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create user
-    user_id = str(uuid.uuid4())
-    hashed_password = hash_password(user_data.password)
-    
-    user_doc = {
-        "id": user_id,
-        "email": user_data.email,
-        "password": hashed_password,
-        "first_name": user_data.first_name,
-        "last_name": user_data.last_name,
-        "phone": user_data.phone,
-        "address": user_data.address,
-        "date_of_birth": user_data.date_of_birth,
-        "gender": user_data.gender,
-        "role": user_data.role,
-        "is_active": True,
-        "created_at": datetime.utcnow()
-    }
-    
-    await db.users.insert_one(user_doc)
-    
-    # Create access token
-    access_token_expires = timedelta(days=30)
-    access_token = create_access_token(
-        data={"sub": user_id}, expires_delta=access_token_expires
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": user_id,
-            "email": user_data.email,
-            "first_name": user_data.first_name,
-            "last_name": user_data.last_name,
-            "role": user_data.role
+@app.post("/api/auth/register", response_model=dict)
+async def register_user(
+    # User data
+    email: str = Form(...),
+    password: str = Form(...),
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    phone: str = Form(...),
+    address: str = Form(...),
+    date_of_birth: str = Form(...),
+    gender: str = Form(...),
+    role: str = Form(...),
+    state: str = Form(...),
+    # Optional profile photo
+    profile_photo: Optional[UploadFile] = File(None)
+):
+    try:
+        # Validate date_of_birth format
+        try:
+            birth_date = datetime.fromisoformat(date_of_birth)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        
+        # Check if user already exists
+        existing_user = await db.users.find_one({"email": email})
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        # Validate state
+        if state not in ALGERIAN_STATES:
+            raise HTTPException(status_code=400, detail="Invalid state")
+        
+        # Validate role
+        if role not in ['student', 'teacher', 'manager']:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        
+        # Validate gender
+        if gender not in ['male', 'female']:
+            raise HTTPException(status_code=400, detail="Invalid gender")
+        
+        # Hash password
+        password_hash = pwd_context.hash(password)
+        
+        # Handle profile photo upload
+        profile_photo_url = None
+        if profile_photo and profile_photo.size > 0:
+            try:
+                upload_result = await upload_to_cloudinary(profile_photo, "profile_photos", "image")
+                profile_photo_url = upload_result["file_url"]
+            except Exception as e:
+                logger.warning(f"Failed to upload profile photo: {str(e)}")
+                # Continue without photo - don't fail registration
+        
+        # Create user
+        user_data = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "password_hash": password_hash,
+            "first_name": first_name,
+            "last_name": last_name,
+            "phone": phone,
+            "address": address,
+            "date_of_birth": birth_date,
+            "gender": gender,
+            "role": role,
+            "state": state,
+            "profile_photo_url": profile_photo_url,
+            "created_at": datetime.utcnow(),
+            "is_active": True
         }
-    }
+        
+        await db.users.insert_one(user_data)
+        
+        # Create role-specific profiles
+        if role == "student":
+            student_profile = {
+                "id": str(uuid.uuid4()),
+                "user_id": user_data["id"],
+                "documents": {},
+                "medical_info": {},
+                "enrollment_status": "not_enrolled",
+                "created_at": datetime.utcnow()
+            }
+            await db.student_profiles.insert_one(student_profile)
+        
+        # Generate access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": email, "user_id": user_data["id"]}, 
+            expires_delta=access_token_expires
+        )
+        
+        # Return user data (exclude password hash)
+        user_response = {k: v for k, v in user_data.items() if k != "password_hash"}
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user_response
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Registration failed")
 
 @app.post("/api/auth/login")
 async def login(user_data: UserLogin):
