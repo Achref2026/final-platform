@@ -727,6 +727,99 @@ async def create_driving_school(
         "photos": photo_urls
     }
 
+# Demo Data Creation API
+@api_router.post("/demo/create-sample-data")
+async def create_sample_data():
+    """Create sample data for testing (DEMO ONLY)"""
+    try:
+        # Sample Algerian road signs quiz questions
+        sample_quiz_questions = [
+            {
+                "question": "What does this sign mean: Red circle with white horizontal bar?",
+                "options": ["No entry", "Stop", "Give way", "Speed limit"],
+                "correct_answer": "No entry"
+            },
+            {
+                "question": "At an intersection with no traffic signs, who has priority?",
+                "options": ["Vehicle from the left", "Vehicle from the right", "Larger vehicle", "Faster vehicle"],
+                "correct_answer": "Vehicle from the right"
+            },
+            {
+                "question": "What is the maximum speed limit in residential areas in Algeria?",
+                "options": ["30 km/h", "40 km/h", "50 km/h", "60 km/h"],
+                "correct_answer": "50 km/h"
+            },
+            {
+                "question": "When should you use your vehicle's hazard lights?",
+                "options": ["During rain", "When parking", "During emergency/breakdown", "At night"],
+                "correct_answer": "During emergency/breakdown"
+            },
+            {
+                "question": "What documents must you carry while driving in Algeria?",
+                "options": ["Only driving license", "License and registration", "License, registration, and insurance", "Only insurance"],
+                "correct_answer": "License, registration, and insurance"
+            }
+        ]
+        
+        # Create sample schools if none exist
+        school_count = await db.driving_schools.count_documents({})
+        if school_count == 0:
+            sample_schools = [
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "École de Conduite Alger Centre",
+                    "address": "Rue Didouche Mourad, Alger Centre",
+                    "state": "Alger",
+                    "phone": "+213 21 123 456",
+                    "email": "contact@ecolealger.dz",
+                    "description": "École de conduite moderne au cœur d'Alger avec instructeurs expérimentés",
+                    "price": 25000.0,
+                    "rating": 4.5,
+                    "total_reviews": 127,
+                    "manager_id": "demo-manager-1",
+                    "created_at": datetime.utcnow()
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "Auto-École Oran Modern",
+                    "address": "Boulevard de la Révolution, Oran",
+                    "state": "Oran",
+                    "phone": "+213 41 789 123",
+                    "email": "info@oranmodern.dz",
+                    "description": "Formation complète avec véhicules récents et simulateurs",
+                    "price": 28000.0,
+                    "rating": 4.7,
+                    "total_reviews": 89,
+                    "manager_id": "demo-manager-2",
+                    "created_at": datetime.utcnow()
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "École Conduite Constantine",
+                    "address": "Rue Ben Badis, Constantine",
+                    "state": "Constantine",
+                    "phone": "+213 31 456 789",
+                    "email": "ecole@constantine-conduite.dz",
+                    "description": "Spécialisée dans la formation des conducteurs débutants",
+                    "price": 22000.0,
+                    "rating": 4.2,
+                    "total_reviews": 156,
+                    "manager_id": "demo-manager-3",
+                    "created_at": datetime.utcnow()
+                }
+            ]
+            
+            await db.driving_schools.insert_many(sample_schools)
+            
+        return {
+            "message": "Sample data created successfully",
+            "quiz_questions": len(sample_quiz_questions),
+            "sample_schools": 3
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create sample data: {str(e)}")
+
 @app.post("/api/enrollments")
 async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.STUDENT:
