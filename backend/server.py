@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, status, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, status, Depends, UploadFile, File, Form, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +19,9 @@ import cloudinary.uploader
 import cloudinary.api
 import aiofiles
 import json
+
+# Initialize API Router
+api_router = APIRouter()
 
 # Configure logging
 logger = logging.getLogger(__name__)
