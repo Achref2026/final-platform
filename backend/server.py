@@ -79,15 +79,7 @@ app.include_router(api_router)
 async def health_check():
     return {"status": "healthy", "message": "Driving School Platform API is running"}
 
-# API Routes
-
-@api_router.get("/health")
-async def api_health_check():
-    return {"status": "healthy", "message": "Driving School Platform API is running"}
-
-@api_router.get("/states")
-async def get_states():
-    return {"states": ALGERIAN_STATES}
+# Enums
 class UserRole(str, Enum):
     STUDENT = "student"
     TEACHER = "teacher"
