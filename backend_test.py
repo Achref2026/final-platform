@@ -253,6 +253,165 @@ class AlgerianDrivingSchoolTester:
         else:
             print("❌ Failed to initiate payment")
             return False, {}
+            
+    def test_create_video_room(self, course_id):
+        """Test creating a video room for a course"""
+        room_data = {
+            "room_name": f"test-room-{self.test_timestamp}",
+            "course_id": course_id,
+            "privacy": "private",
+            "properties": {
+                "enable_screenshare": True,
+                "enable_chat": True,
+                "start_video_off": False,
+                "start_audio_off": False,
+                "max_participants": 5
+            }
+        }
+        
+        success, response = self.run_test(
+            f"Create Video Room for Course (ID: {course_id})",
+            "POST",
+            "video/create-room",
+            200,
+            data=room_data
+        )
+        
+        if success and 'session_id' in response:
+            self.session_id = response['session_id']
+            print(f"✅ Video room created successfully with session ID: {response['session_id']}")
+            return True, response
+        else:
+            print("❌ Failed to create video room")
+            return False, {}
+    
+    def test_get_course_video_rooms(self, course_id):
+        """Test getting all video rooms for a course"""
+        success, response = self.run_test(
+            f"Get Video Rooms for Course (ID: {course_id})",
+            "GET",
+            f"video/rooms/{course_id}",
+            200
+        )
+        
+        if success:
+            print(f"✅ Retrieved {len(response)} video rooms for course")
+            return True, response
+        else:
+            print("❌ Failed to retrieve video rooms for course")
+            return False, []
+    
+    def test_join_video_session(self, session_id):
+        """Test joining a video session"""
+        success, response = self.run_test(
+            f"Join Video Session (ID: {session_id})",
+            "POST",
+            f"video/join/{session_id}",
+            200
+        )
+        
+        if success and 'room_url' in response:
+            print(f"✅ Successfully joined video session with URL: {response['room_url']}")
+            return True, response
+        else:
+            print("❌ Failed to join video session")
+            return False, {}
+    
+    def test_upload_document(self, document_type="profile_photo"):
+        """Test uploading a document"""
+        # Create a simple test file
+        file_content = b"This is a test file for document upload API testing."
+        files = {
+            'file': ('test_document.txt', BytesIO(file_content), 'text/plain')
+        }
+        
+        # Set up headers without Content-Type (will be set by requests for multipart)
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing Document Upload ({document_type})...")
+        
+        try:
+            url = f"{self.base_url}/api/documents/upload"
+            response = requests.post(
+                url,
+                files=files,
+                data={'document_type': document_type},
+                headers=headers
+            )
+            
+            print(f"URL: {url}")
+            print(f"Status Code: {response.status_code}")
+            
+            try:
+                response_data = response.json()
+                print(f"Response: {json.dumps(response_data, indent=2)}")
+            except:
+                print(f"Response: {response.text}")
+            
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                self.document_id = response_data.get('document_id')
+                return True, response_data
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
+    
+    def test_get_my_documents(self):
+        """Test retrieving current user's documents"""
+        success, response = self.run_test(
+            "Get My Documents",
+            "GET",
+            "documents/my",
+            200
+        )
+        
+        if success:
+            print(f"✅ Retrieved {len(response)} documents")
+            return True, response
+        else:
+            print("❌ Failed to retrieve documents")
+            return False, []
+    
+    def test_get_user_documents(self, user_id):
+        """Test retrieving documents for a specific user (manager/teacher only)"""
+        success, response = self.run_test(
+            f"Get User Documents (ID: {user_id})",
+            "GET",
+            f"documents/{user_id}",
+            200
+        )
+        
+        if success:
+            print(f"✅ Retrieved {len(response)} documents for user")
+            return True, response
+        else:
+            print("❌ Failed to retrieve user documents")
+            return False, []
+    
+    def test_verify_document(self, document_id):
+        """Test verifying a document (manager only)"""
+        success, response = self.run_test(
+            f"Verify Document (ID: {document_id})",
+            "POST",
+            f"documents/{document_id}/verify",
+            200
+        )
+        
+        if success:
+            print(f"✅ Document verified successfully")
+            return True
+        else:
+            print("❌ Failed to verify document")
+            return False
 
 def test_existing_email_registration(tester):
     """Test registration with an existing email (should fail with 400)"""
