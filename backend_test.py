@@ -552,10 +552,13 @@ def test_student_workflow(tester):
         return False
     
     # 5. Get student enrollments
-    tester.test_get_student_enrollments()
+    success, enrollments = tester.test_get_student_enrollments()
     
     # 6. Get student courses
-    tester.test_get_student_courses()
+    success, courses = tester.test_get_student_courses()
+    if success and courses:
+        # Store a course ID for video API testing
+        tester.course_id = courses[0]['id']
     
     # 7. Get student dashboard again (should now have enrollment data)
     tester.test_get_dashboard_data("student")
@@ -563,6 +566,10 @@ def test_student_workflow(tester):
     # 8. Initiate payment (if enrollment was successful)
     if tester.enrollment_id:
         tester.test_payment_initiation(tester.enrollment_id)
+    
+    # 9. Test document upload API
+    tester.test_upload_document("profile_photo")
+    tester.test_get_my_documents()
     
     print("✅ Student workflow completed successfully")
     return True
