@@ -1725,6 +1725,52 @@ function App() {
       {currentPage === 'dashboard' && renderDashboard()}
       {showAuthModal && renderAuthModal()}
       {selectedSchool && renderSchoolDetailsModal()}
+      
+      {/* Video Call Modal */}
+      {showVideoCall && videoCallRoom && (
+        <div className="modal-backdrop">
+          <div className="modal-container max-w-6xl">
+            <VideoCall
+              roomUrl={videoCallRoom.url}
+              onLeave={leaveVideoCall}
+              userName={user ? `${user.first_name} ${user.last_name}` : 'User'}
+            />
+          </div>
+        </div>
+      )}
+      
+      {/* Document Upload Modal */}
+      {showDocumentUpload && (
+        <div className="modal-backdrop">
+          <div className="modal-container max-w-2xl">
+            <DocumentUpload
+              documentType={uploadDocumentType}
+              onUploadSuccess={handleDocumentUploadSuccess}
+              onCancel={cancelDocumentUpload}
+            />
+          </div>
+        </div>
+      )}
+      
+      {/* Document List Modal */}
+      {showDocumentList && (
+        <div className="modal-backdrop">
+          <div className="modal-container max-w-4xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">
+                📄 My Documents
+              </h2>
+              <button
+                onClick={closeDocumentList}
+                className="text-gray-400 hover:text-gray-600 text-3xl font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <DocumentList />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
