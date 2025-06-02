@@ -335,7 +335,58 @@ body {
   /* Dark mode styles will be added here when needed */
 }
 
-/* Additional modern effects */
+/* Additional modern styles for new features */
+  .video-call-container {
+    @apply bg-white rounded-lg shadow-lg;
+  }
+  
+  .loading-overlay {
+    @apply absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50 rounded-lg;
+  }
+  
+  .video-controls {
+    @apply p-4 border-b border-gray-200;
+  }
+  
+  .video-frame {
+    @apply rounded-lg overflow-hidden bg-gray-900;
+  }
+  
+  .document-upload-container {
+    @apply p-6;
+  }
+  
+  .upload-area {
+    @apply border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors;
+  }
+  
+  .upload-dropzone {
+    @apply cursor-pointer;
+  }
+  
+  .upload-progress {
+    @apply text-center;
+  }
+  
+  .progress-bar-container {
+    @apply w-full bg-gray-200 rounded-full h-2;
+  }
+  
+  .progress-bar-fill {
+    @apply bg-blue-600 h-2 rounded-full transition-all duration-300;
+  }
+  
+  .document-card {
+    @apply bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow;
+  }
+  
+  .documents-list {
+    @apply space-y-4;
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors;
+  }
 .glass-effect {
   backdrop-filter: blur(10px);
   background: rgba(255, 255, 255, 0.1);
