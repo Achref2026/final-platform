@@ -22,6 +22,11 @@ import json
 # Initialize FastAPI app
 app = FastAPI(title="Driving School Platform API")
 
+# Create demo uploads directory and mount static files
+demo_uploads_dir = Path("demo-uploads")
+demo_uploads_dir.mkdir(exist_ok=True)
+app.mount("/demo-uploads", StaticFiles(directory="demo-uploads"), name="demo-uploads")
+
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
