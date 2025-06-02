@@ -594,7 +594,7 @@ async def register_user(
         logger.error(f"Registration error: {str(e)}")
         raise HTTPException(status_code=500, detail="Registration failed")
 
-@app.post("/api/auth/login")
+@api_router.post("/auth/login")
 async def login(user_data: UserLogin):
     user = await db.users.find_one({"email": user_data.email})
     if not user or not verify_password(user_data.password, user["password_hash"]):
@@ -617,7 +617,7 @@ async def login(user_data: UserLogin):
         }
     }
 
-@app.get("/api/driving-schools")
+@api_router.get("/driving-schools")
 async def get_driving_schools(state: Optional[str] = None, limit: int = 20, skip: int = 0):
     query = {}
     if state:
@@ -637,7 +637,7 @@ async def get_driving_schools(state: Optional[str] = None, limit: int = 20, skip
         "skip": skip
     }
 
-@app.get("/api/driving-schools/{school_id}")
+@api_router.get("/driving-schools/{school_id}")
 async def get_driving_school(school_id: str):
     school = await db.driving_schools.find_one({"id": school_id})
     if not school:
@@ -660,7 +660,7 @@ async def get_driving_school(school_id: str):
     
     return serialized_school
 
-@app.post("/api/driving-schools")
+@api_router.post("/driving-schools")
 async def create_driving_school(
     # School data
     name: str = Form(...),
