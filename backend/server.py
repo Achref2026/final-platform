@@ -652,27 +652,64 @@ async def get_driving_school(school_id: str):
     return serialized_school
 
 @app.post("/api/driving-schools")
-async def create_driving_school(school_data: DrivingSchoolCreate, current_user: dict = Depends(get_current_user)):
+async def create_driving_school(
+    # School data
+    name: str = Form(...),
+    address: str = Form(...),
+    state: str = Form(...),
+    phone: str = Form(...),
+    email: str = Form(...),
+    description: str = Form(...),
+    price: float = Form(...),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    # Optional files
+    logo: Optional[UploadFile] = File(None),
+    photos: List[UploadFile] = File([]),
+    current_user: dict = Depends(get_current_user)
+):
     if current_user["role"] != "manager":
         raise HTTPException(status_code=403, detail="Only managers can create driving schools")
     
-    if school_data.state not in ALGERIAN_STATES:
+    if state not in ALGERIAN_STATES:
         raise HTTPException(status_code=400, detail="Invalid state")
+    
+    # Handle logo upload
+    logo_url = None
+    if logo and logo.size > 0:
+        try:
+            upload_result = await upload_to_cloudinary(logo, "driving_schools/logos", "image")
+            logo_url = upload_result["file_url"]
+        except Exception as e:
+            logger.warning(f"Failed to upload logo: {str(e)}")
+            # Continue without logo - don't fail school creation
+    
+    # Handle photos upload
+    photo_urls = []
+    if photos:
+        for photo in photos:
+            if photo.size > 0:  # Check if file is not empty
+                try:
+                    upload_result = await upload_to_cloudinary(photo, "driving_schools/photos", "image")
+                    photo_urls.append(upload_result["file_url"])
+                except Exception as e:
+                    logger.warning(f"Failed to upload photo {photo.filename}: {str(e)}")
+                    # Continue with other photos
     
     school_id = str(uuid.uuid4())
     school_doc = {
         "id": school_id,
-        "name": school_data.name,
-        "address": school_data.address,
-        "state": school_data.state,
-        "phone": school_data.phone,
-        "email": school_data.email,
-        "description": school_data.description,
-        "price": school_data.price,
-        "latitude": school_data.latitude,
-        "longitude": school_data.longitude,
-        "logo_url": None,
-        "photos": [],
+        "name": name,
+        "address": address,
+        "state": state,
+        "phone": phone,
+        "email": email,
+        "description": description,
+        "price": price,
+        "latitude": latitude,
+        "longitude": longitude,
+        "logo_url": logo_url,
+        "photos": photo_urls,
         "rating": 0.0,
         "total_reviews": 0,
         "manager_id": current_user["id"],
@@ -680,7 +717,12 @@ async def create_driving_school(school_data: DrivingSchoolCreate, current_user: 
     }
     
     await db.driving_schools.insert_one(school_doc)
-    return {"id": school_id, "message": "Driving school created successfully"}
+    return {
+        "id": school_id, 
+        "message": "Driving school created successfully",
+        "logo_url": logo_url,
+        "photos": photo_urls
+    }
 
 @app.post("/api/enrollments")
 async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dict = Depends(get_current_user)):
