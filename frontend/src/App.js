@@ -3,6 +3,7 @@ import './App.css';
 import VideoCall from './components/VideoCall';
 import DocumentUpload from './components/DocumentUpload';
 import DocumentList from './components/DocumentList';
+import PhotoUpload from './components/PhotoUpload';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 
