@@ -1,75 +1,792 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
-import logging
-from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import List, Optional
+from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, EmailStr
+from motor.motor_asyncio import AsyncIOMotorClient
+from passlib.context import CryptContext
+import jwt
+from enum import Enum
 
+# Initialize FastAPI app
+app = FastAPI(title="Driving School Platform API")
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
-
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
-# Create the main app without a prefix
-app = FastAPI()
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Include the router in the main app
-app.include_router(api_router)
-
+# CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Database setup
+MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+client = AsyncIOMotorClient(MONGO_URL)
+db = client.driving_school_platform
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# Security setup
+security = HTTPBearer()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+ALGORITHM = "HS256"
+
+# Enums
+class UserRole(str, Enum):
+    STUDENT = "student"
+    TEACHER = "teacher"
+    MANAGER = "manager"
+
+class Gender(str, Enum):
+    MALE = "male"
+    FEMALE = "female"
+
+class CourseType(str, Enum):
+    THEORY = "theory"
+    PARK = "park"
+    ROAD = "road"
+
+class PaymentStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class CourseStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class ExamStatus(str, Enum):
+    NOT_TAKEN = "not_taken"
+    PASSED = "passed"
+    FAILED = "failed"
+
+# Pydantic Models
+class UserBase(BaseModel):
+    email: EmailStr
+    first_name: str
+    last_name: str
+    phone: str
+    address: str
+    date_of_birth: str
+    gender: Gender
+
+class UserCreate(UserBase):
+    password: str
+    role: UserRole
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class User(UserBase):
+    id: str
+    role: UserRole
+    is_active: bool = True
+    created_at: datetime
+
+class DrivingSchool(BaseModel):
+    id: str
+    name: str
+    address: str
+    state: str  # One of the 58 Algerian states
+    phone: str
+    email: EmailStr
+    description: str
+    logo_url: Optional[str] = None
+    photos: List[str] = []
+    price: float
+    rating: float = 0.0
+    total_reviews: int = 0
+    manager_id: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    created_at: datetime
+
+class DrivingSchoolCreate(BaseModel):
+    name: str
+    address: str
+    state: str
+    phone: str
+    email: EmailStr
+    description: str
+    price: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+class Teacher(BaseModel):
+    id: str
+    user_id: str
+    driving_school_id: str
+    driving_license_url: str
+    teaching_license_url: str
+    photo_url: str
+    can_teach_male: bool = True
+    can_teach_female: bool = True
+    rating: float = 0.0
+    total_reviews: int = 0
+    created_at: datetime
+
+class TeacherCreate(BaseModel):
+    driving_license_url: str
+    teaching_license_url: str
+    photo_url: str
+    can_teach_male: bool = True
+    can_teach_female: bool = True
+
+class Enrollment(BaseModel):
+    id: str
+    student_id: str
+    driving_school_id: str
+    amount: float
+    payment_status: PaymentStatus
+    is_approved: bool = False
+    created_at: datetime
+    approved_at: Optional[datetime] = None
+
+class EnrollmentCreate(BaseModel):
+    school_id: str
+
+class Course(BaseModel):
+    id: str
+    enrollment_id: str
+    course_type: CourseType
+    status: CourseStatus
+    teacher_id: Optional[str] = None
+    scheduled_sessions: List[dict] = []
+    completed_sessions: int = 0
+    total_sessions: int
+    exam_status: ExamStatus = ExamStatus.NOT_TAKEN
+    exam_score: Optional[float] = None
+    created_at: datetime
+    updated_at: datetime
+
+class CourseSession(BaseModel):
+    id: str
+    course_id: str
+    teacher_id: str
+    student_id: str
+    scheduled_time: datetime
+    duration_minutes: int
+    status: str  # scheduled, completed, cancelled
+    notes: Optional[str] = None
+    created_at: datetime
+
+class Quiz(BaseModel):
+    id: str
+    course_id: str
+    title: str
+    questions: List[dict]
+    time_limit_minutes: int
+    passing_score: float
+    created_at: datetime
+
+class QuizAttempt(BaseModel):
+    id: str
+    quiz_id: str
+    student_id: str
+    answers: List[dict]
+    score: float
+    passed: bool
+    completed_at: datetime
+
+class BaridimobPayment(BaseModel):
+    enrollment_id: str
+    amount: float
+    merchant_id: str
+    transaction_id: str
+
+# Algerian States (58 wilayas)
+ALGERIAN_STATES = [
+    "Adrar", "Chlef", "Laghouat", "Oum El Bouaghi", "Batna", "Béjaïa", "Biskra", 
+    "Béchar", "Blida", "Bouira", "Tamanrasset", "Tébessa", "Tlemcen", "Tiaret", 
+    "Tizi Ouzou", "Alger", "Djelfa", "Jijel", "Sétif", "Saïda", "Skikda", 
+    "Sidi Bel Abbès", "Annaba", "Guelma", "Constantine", "Médéa", "Mostaganem", 
+    "M'Sila", "Mascara", "Ouargla", "Oran", "El Bayadh", "Illizi", 
+    "Bordj Bou Arréridj", "Boumerdès", "El Tarf", "Tindouf", "Tissemsilt", 
+    "El Oued", "Khenchela", "Souk Ahras", "Tipaza", "Mila", "Aïn Defla", 
+    "Naâma", "Aïn Témouchent", "Ghardaïa", "Relizane", "Timimoun", 
+    "Bordj Badji Mokhtar", "Ouled Djellal", "Béni Abbès", "In Salah", 
+    "In Guezzam", "Touggourt", "Djanet", "El M'Ghair", "El Meniaa"
+]
+
+# Helper functions
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def serialize_doc(doc):
+    """Convert MongoDB document to JSON serializable format"""
+    if doc is None:
+        return None
+    if isinstance(doc, list):
+        return [serialize_doc(item) for item in doc]
+    if isinstance(doc, dict):
+        result = {}
+        for key, value in doc.items():
+            if key == '_id':
+                continue  # Skip MongoDB _id field
+            result[key] = serialize_doc(value)
+        return result
+    return doc
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    
+    user = await db.users.find_one({"id": user_id})
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+async def create_default_courses(enrollment_id: str):
+    """Create default courses for a new enrollment"""
+    course_types = [
+        {"type": CourseType.THEORY, "sessions": 10},
+        {"type": CourseType.PARK, "sessions": 5}, 
+        {"type": CourseType.ROAD, "sessions": 15}
+    ]
+    
+    courses = []
+    for course_config in course_types:
+        course_id = str(uuid.uuid4())
+        course_doc = {
+            "id": course_id,
+            "enrollment_id": enrollment_id,
+            "course_type": course_config["type"],
+            "status": CourseStatus.NOT_STARTED,
+            "teacher_id": None,
+            "scheduled_sessions": [],
+            "completed_sessions": 0,
+            "total_sessions": course_config["sessions"],
+            "exam_status": ExamStatus.NOT_TAKEN,
+            "exam_score": None,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        courses.append(course_doc)
+    
+    await db.courses.insert_many(courses)
+    return courses
+
+# API Routes
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy", "message": "Driving School Platform API is running"}
+
+@app.get("/api/states")
+async def get_states():
+    return {"states": ALGERIAN_STATES}
+
+@app.post("/api/auth/register")
+async def register(user_data: UserCreate):
+    # Check if user exists
+    existing_user = await db.users.find_one({"email": user_data.email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user_id = str(uuid.uuid4())
+    hashed_password = hash_password(user_data.password)
+    
+    user_doc = {
+        "id": user_id,
+        "email": user_data.email,
+        "password": hashed_password,
+        "first_name": user_data.first_name,
+        "last_name": user_data.last_name,
+        "phone": user_data.phone,
+        "address": user_data.address,
+        "date_of_birth": user_data.date_of_birth,
+        "gender": user_data.gender,
+        "role": user_data.role,
+        "is_active": True,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Create access token
+    access_token_expires = timedelta(days=30)
+    access_token = create_access_token(
+        data={"sub": user_id}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user_id,
+            "email": user_data.email,
+            "first_name": user_data.first_name,
+            "last_name": user_data.last_name,
+            "role": user_data.role
+        }
+    }
+
+@app.post("/api/auth/login")
+async def login(user_data: UserLogin):
+    user = await db.users.find_one({"email": user_data.email})
+    if not user or not verify_password(user_data.password, user["password"]):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    
+    access_token_expires = timedelta(days=30)
+    access_token = create_access_token(
+        data={"sub": user["id"]}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "first_name": user["first_name"],
+            "last_name": user["last_name"],
+            "role": user["role"]
+        }
+    }
+
+@app.get("/api/driving-schools")
+async def get_driving_schools(state: Optional[str] = None, limit: int = 20, skip: int = 0):
+    query = {}
+    if state:
+        query["state"] = state
+    
+    schools_cursor = db.driving_schools.find(query).skip(skip).limit(limit)
+    schools = await schools_cursor.to_list(length=limit)
+    total = await db.driving_schools.count_documents(query)
+    
+    # Serialize the documents
+    serialized_schools = serialize_doc(schools)
+    
+    return {
+        "schools": serialized_schools,
+        "total": total,
+        "limit": limit,
+        "skip": skip
+    }
+
+@app.get("/api/driving-schools/{school_id}")
+async def get_driving_school(school_id: str):
+    school = await db.driving_schools.find_one({"id": school_id})
+    if not school:
+        raise HTTPException(status_code=404, detail="Driving school not found")
+    
+    # Get teachers for this school
+    teachers_cursor = db.teachers.find({"driving_school_id": school_id})
+    teachers = await teachers_cursor.to_list(length=None)
+    
+    # Enrich teachers with user data
+    for teacher in teachers:
+        user = await db.users.find_one({"id": teacher["user_id"]})
+        if user:
+            teacher["user"] = serialize_doc(user)
+    
+    # Serialize the documents
+    serialized_school = serialize_doc(school)
+    serialized_teachers = serialize_doc(teachers)
+    serialized_school["teachers"] = serialized_teachers
+    
+    return serialized_school
+
+@app.post("/api/driving-schools")
+async def create_driving_school(school_data: DrivingSchoolCreate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can create driving schools")
+    
+    if school_data.state not in ALGERIAN_STATES:
+        raise HTTPException(status_code=400, detail="Invalid state")
+    
+    school_id = str(uuid.uuid4())
+    school_doc = {
+        "id": school_id,
+        "name": school_data.name,
+        "address": school_data.address,
+        "state": school_data.state,
+        "phone": school_data.phone,
+        "email": school_data.email,
+        "description": school_data.description,
+        "price": school_data.price,
+        "latitude": school_data.latitude,
+        "longitude": school_data.longitude,
+        "logo_url": None,
+        "photos": [],
+        "rating": 0.0,
+        "total_reviews": 0,
+        "manager_id": current_user["id"],
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.driving_schools.insert_one(school_doc)
+    return {"id": school_id, "message": "Driving school created successfully"}
+
+@app.post("/api/enrollments")
+async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != UserRole.STUDENT:
+        raise HTTPException(status_code=403, detail="Only students can enroll")
+    
+    # Check if school exists
+    school = await db.driving_schools.find_one({"id": enrollment_data.school_id})
+    if not school:
+        raise HTTPException(status_code=404, detail="Driving school not found")
+    
+    # Check if student already enrolled
+    existing_enrollment = await db.enrollments.find_one({
+        "student_id": current_user["id"],
+        "driving_school_id": enrollment_data.school_id
+    })
+    if existing_enrollment:
+        raise HTTPException(status_code=400, detail="Already enrolled in this school")
+    
+    enrollment_id = str(uuid.uuid4())
+    enrollment_doc = {
+        "id": enrollment_id,
+        "student_id": current_user["id"],
+        "driving_school_id": enrollment_data.school_id,
+        "amount": school["price"],
+        "payment_status": PaymentStatus.PENDING,
+        "is_approved": False,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.enrollments.insert_one(enrollment_doc)
+    
+    # Create default courses for the enrollment
+    await create_default_courses(enrollment_id)
+    
+    return {
+        "enrollment_id": enrollment_id,
+        "amount": school["price"],
+        "message": "Enrollment created. Please proceed with payment."
+    }
+
+@app.get("/api/enrollments/my")
+async def get_my_enrollments(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can view enrollments")
+    
+    enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
+    enrollments = await enrollments_cursor.to_list(length=None)
+    
+    # Enrich with school details and courses
+    for enrollment in enrollments:
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        enrollment["school"] = serialize_doc(school)
+        
+        # Get courses for this enrollment
+        courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
+        courses = await courses_cursor.to_list(length=None)
+        enrollment["courses"] = serialize_doc(courses)
+    
+    return serialize_doc(enrollments)
+
+# Teacher Management APIs
+@app.post("/api/teachers")
+async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can add teachers")
+    
+    # Find the manager's driving school
+    school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
+    if not school:
+        raise HTTPException(status_code=404, detail="Manager's driving school not found")
+    
+    teacher_id = str(uuid.uuid4())
+    teacher_doc = {
+        "id": teacher_id,
+        "user_id": current_user["id"],  # Manager can add themselves as teacher
+        "driving_school_id": school["id"],
+        "driving_license_url": teacher_data.driving_license_url,
+        "teaching_license_url": teacher_data.teaching_license_url,
+        "photo_url": teacher_data.photo_url,
+        "can_teach_male": teacher_data.can_teach_male,
+        "can_teach_female": teacher_data.can_teach_female,
+        "rating": 0.0,
+        "total_reviews": 0,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.teachers.insert_one(teacher_doc)
+    return {"id": teacher_id, "message": "Teacher added successfully"}
+
+@app.get("/api/teachers/my-school")
+async def get_my_school_teachers(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can view school teachers")
+    
+    # Find the manager's driving school
+    school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
+    if not school:
+        raise HTTPException(status_code=404, detail="Manager's driving school not found")
+    
+    teachers_cursor = db.teachers.find({"driving_school_id": school["id"]})
+    teachers = await teachers_cursor.to_list(length=None)
+    
+    # Enrich with user data
+    for teacher in teachers:
+        user = await db.users.find_one({"id": teacher["user_id"]})
+        if user:
+            teacher["user"] = serialize_doc(user)
+    
+    return serialize_doc(teachers)
+
+# Course Management APIs
+@app.get("/api/courses/my")
+async def get_my_courses(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can view their courses")
+    
+    # Get student's enrollments
+    enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
+    enrollments = await enrollments_cursor.to_list(length=None)
+    
+    all_courses = []
+    for enrollment in enrollments:
+        courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
+        courses = await courses_cursor.to_list(length=None)
+        
+        # Enrich with school and teacher data
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        for course in courses:
+            course["school"] = serialize_doc(school)
+            course["enrollment"] = serialize_doc(enrollment)
+            if course.get("teacher_id"):
+                teacher = await db.teachers.find_one({"id": course["teacher_id"]})
+                if teacher:
+                    teacher_user = await db.users.find_one({"id": teacher["user_id"]})
+                    teacher["user"] = serialize_doc(teacher_user)
+                    course["teacher"] = serialize_doc(teacher)
+        
+        all_courses.extend(courses)
+    
+    return serialize_doc(all_courses)
+
+@app.post("/api/courses/{course_id}/assign-teacher")
+async def assign_teacher_to_course(course_id: str, teacher_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can assign teachers")
+    
+    # Verify course exists and belongs to manager's school
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+    
+    if school["manager_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this course")
+    
+    # Verify teacher exists and belongs to this school
+    teacher = await db.teachers.find_one({"id": teacher_id, "driving_school_id": school["id"]})
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found or not part of this school")
+    
+    # Check gender compatibility for park and road courses
+    if course["course_type"] in [CourseType.PARK, CourseType.ROAD]:
+        student = await db.users.find_one({"id": enrollment["student_id"]})
+        if student["gender"] == "female" and not teacher["can_teach_female"]:
+            raise HTTPException(status_code=400, detail="Teacher cannot teach female students")
+    
+    # Assign teacher
+    await db.courses.update_one(
+        {"id": course_id},
+        {
+            "$set": {
+                "teacher_id": teacher_id,
+                "status": CourseStatus.IN_PROGRESS,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    return {"message": "Teacher assigned successfully"}
+
+# Dashboard APIs
+@app.get("/api/dashboard/student")
+async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Student dashboard access only")
+    
+    # Get enrollments
+    enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
+    enrollments = await enrollments_cursor.to_list(length=None)
+    
+    dashboard_data = {
+        "total_enrollments": len(enrollments),
+        "active_enrollments": len([e for e in enrollments if e["is_approved"]]),
+        "pending_payments": len([e for e in enrollments if e["payment_status"] == PaymentStatus.PENDING]),
+        "enrollments": []
+    }
+    
+    for enrollment in enrollments:
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
+        courses = await courses_cursor.to_list(length=None)
+        
+        enrollment_data = {
+            "enrollment": serialize_doc(enrollment),
+            "school": serialize_doc(school),
+            "courses": serialize_doc(courses),
+            "progress": {
+                "theory": {"completed": 0, "total": 0},
+                "park": {"completed": 0, "total": 0},
+                "road": {"completed": 0, "total": 0}
+            }
+        }
+        
+        for course in courses:
+            course_type = course["course_type"].lower()
+            enrollment_data["progress"][course_type] = {
+                "completed": course["completed_sessions"],
+                "total": course["total_sessions"]
+            }
+        
+        dashboard_data["enrollments"].append(enrollment_data)
+    
+    return dashboard_data
+
+@app.get("/api/dashboard/manager")
+async def get_manager_dashboard(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Manager dashboard access only")
+    
+    # Get manager's school
+    school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
+    if not school:
+        return {"message": "No driving school found. Please create one first."}
+    
+    # Get enrollments for this school
+    enrollments_cursor = db.enrollments.find({"driving_school_id": school["id"]})
+    enrollments = await enrollments_cursor.to_list(length=None)
+    
+    # Get teachers
+    teachers_cursor = db.teachers.find({"driving_school_id": school["id"]})
+    teachers = await teachers_cursor.to_list(length=None)
+    
+    # Get courses
+    enrollment_ids = [e["id"] for e in enrollments]
+    courses_cursor = db.courses.find({"enrollment_id": {"$in": enrollment_ids}})
+    courses = await courses_cursor.to_list(length=None)
+    
+    dashboard_data = {
+        "school": serialize_doc(school),
+        "total_students": len(enrollments),
+        "active_students": len([e for e in enrollments if e["is_approved"]]),
+        "pending_approvals": len([e for e in enrollments if not e["is_approved"]]),
+        "total_teachers": len(teachers),
+        "courses_summary": {
+            "theory": len([c for c in courses if c["course_type"] == CourseType.THEORY]),
+            "park": len([c for c in courses if c["course_type"] == CourseType.PARK]),
+            "road": len([c for c in courses if c["course_type"] == CourseType.ROAD])
+        },
+        "recent_enrollments": serialize_doc(enrollments[-5:]),  # Last 5 enrollments
+        "teachers": serialize_doc(teachers)
+    }
+    
+    return dashboard_data
+
+@app.get("/api/dashboard/teacher")
+async def get_teacher_dashboard(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Teacher dashboard access only")
+    
+    # Get teacher record
+    teacher = await db.teachers.find_one({"user_id": current_user["id"]})
+    if not teacher:
+        return {"message": "Teacher profile not found. Please contact your school manager."}
+    
+    # Get assigned courses
+    courses_cursor = db.courses.find({"teacher_id": teacher["id"]})
+    courses = await courses_cursor.to_list(length=None)
+    
+    # Enrich with student and school data
+    for course in courses:
+        enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+        student = await db.users.find_one({"id": enrollment["student_id"]})
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        
+        course["student"] = serialize_doc(student)
+        course["school"] = serialize_doc(school)
+        course["enrollment"] = serialize_doc(enrollment)
+    
+    dashboard_data = {
+        "teacher": serialize_doc(teacher),
+        "assigned_courses": len(courses),
+        "active_courses": len([c for c in courses if c["status"] == CourseStatus.IN_PROGRESS]),
+        "completed_courses": len([c for c in courses if c["status"] == CourseStatus.COMPLETED]),
+        "courses": serialize_doc(courses)
+    }
+    
+    return dashboard_data
+
+# Payment endpoints (existing)
+@app.post("/api/payments/baridimob/initiate")
+async def initiate_baridimob_payment(enrollment_id: str, current_user: dict = Depends(get_current_user)):
+    # Get enrollment
+    enrollment = await db.enrollments.find_one({"id": enrollment_id})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    if enrollment["student_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    if enrollment["payment_status"] == PaymentStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="Payment already completed")
+    
+    # TODO: Integrate with Baridimob API
+    payment_data = {
+        "payment_url": f"https://baridimob.payment.gateway.dz/pay/{enrollment_id}",
+        "transaction_id": str(uuid.uuid4()),
+        "amount": enrollment["amount"],
+        "enrollment_id": enrollment_id,
+        "message": "Redirect user to payment_url to complete payment"
+    }
+    
+    return payment_data
+
+@app.post("/api/payments/baridimob/callback")
+async def baridimob_payment_callback(transaction_id: str, status: str, enrollment_id: str):
+    enrollment = await db.enrollments.find_one({"id": enrollment_id})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    if status == "success":
+        await db.enrollments.update_one(
+            {"id": enrollment_id},
+            {"$set": {"payment_status": PaymentStatus.COMPLETED}}
+        )
+        return {"message": "Payment confirmed successfully"}
+    else:
+        await db.enrollments.update_one(
+            {"id": enrollment_id},
+            {"$set": {"payment_status": PaymentStatus.FAILED}}
+        )
+        return {"message": "Payment failed"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
