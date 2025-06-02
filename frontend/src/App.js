@@ -313,6 +313,8 @@ function App() {
               DrivingDZ
             </h1>
           </div>
+          
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             <button
               onClick={() => setCurrentPage('home')}
@@ -386,7 +388,116 @@ function App() {
               </div>
             )}
           </nav>
+
+          {/* Mobile Menu Button */}
+          <div className="md:hidden">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="text-gray-700 hover:text-blue-600 p-2"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Navigation Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden py-4 border-t border-gray-200">
+            <div className="flex flex-col space-y-3">
+              <button
+                onClick={() => {
+                  setCurrentPage('home');
+                  setMobileMenuOpen(false);
+                }}
+                className={`mobile-nav-button ${currentPage === 'home' ? 'mobile-nav-button-active' : ''}`}
+              >
+                🏠 Home
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentPage('find-schools');
+                  fetchDrivingSchools();
+                  setMobileMenuOpen(false);
+                }}
+                className={`mobile-nav-button ${currentPage === 'find-schools' ? 'mobile-nav-button-active' : ''}`}
+              >
+                🔍 Find Schools
+              </button>
+              {user && (
+                <button
+                  onClick={() => {
+                    setCurrentPage('dashboard');
+                    fetchDashboardData();
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`mobile-nav-button ${currentPage === 'dashboard' ? 'mobile-nav-button-active' : ''}`}
+                >
+                  📊 Dashboard
+                </button>
+              )}
+              {user && user.role === 'manager' && (
+                <button
+                  onClick={() => {
+                    setCurrentPage('register-school');
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`mobile-nav-button ${currentPage === 'register-school' ? 'mobile-nav-button-active' : ''}`}
+                >
+                  🏫 Register School
+                </button>
+              )}
+              
+              {user ? (
+                <div className="pt-4 border-t border-gray-200">
+                  <div className="text-center mb-4">
+                    <span className="text-gray-700 font-medium">Welcome, {user.first_name}!</span>
+                    <div className="text-xs text-blue-600 capitalize bg-blue-100 px-2 py-1 rounded-full inline-block mt-1">
+                      {user.role}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-4 border-t border-gray-200 space-y-3">
+                  <button
+                    onClick={() => {
+                      setAuthMode('login');
+                      setShowAuthModal(true);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                  >
+                    Login
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAuthMode('register');
+                      setShowAuthModal(true);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-2 rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+                  >
+                    Register
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );
