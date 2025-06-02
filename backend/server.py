@@ -2,6 +2,7 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, status, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
