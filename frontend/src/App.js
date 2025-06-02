@@ -561,7 +561,7 @@ function App() {
             Ready to Start Your Journey?
           </h2>
           <p className="text-xl text-gray-300 mb-8">
-            Join thousands of successful drivers who learned with EcoleDZ
+            Join thousands of successful drivers who learned with DrivingDZ
           </p>
           <button
             onClick={() => {
