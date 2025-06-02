@@ -303,28 +303,30 @@ function App() {
   };
 
   const renderNavigation = () => (
-    <header className="bg-white shadow-lg">
+    <header className="bg-white/95 backdrop-blur-sm shadow-lg sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
           <div className="flex items-center">
-            <div className="text-2xl">🚗</div>
-            <h1 className="ml-3 text-2xl font-bold text-gray-900">EcoleDZ</h1>
+            <div className="text-3xl animate-pulse">🚗</div>
+            <h1 className="ml-3 text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              EcoleDZ
+            </h1>
           </div>
           <nav className="hidden md:flex items-center space-x-8">
             <button
               onClick={() => setCurrentPage('home')}
-              className={`text-gray-700 hover:text-blue-600 ${currentPage === 'home' ? 'text-blue-600 font-semibold' : ''}`}
+              className={`nav-button ${currentPage === 'home' ? 'nav-button-active' : ''}`}
             >
-              Home
+              🏠 Home
             </button>
             <button
               onClick={() => {
                 setCurrentPage('find-schools');
                 fetchDrivingSchools();
               }}
-              className={`text-gray-700 hover:text-blue-600 ${currentPage === 'find-schools' ? 'text-blue-600 font-semibold' : ''}`}
+              className={`nav-button ${currentPage === 'find-schools' ? 'nav-button-active' : ''}`}
             >
-              Find Schools
+              🔍 Find Schools
             </button>
             {user && (
               <button
@@ -332,26 +334,30 @@ function App() {
                   setCurrentPage('dashboard');
                   fetchDashboardData();
                 }}
-                className={`text-gray-700 hover:text-blue-600 ${currentPage === 'dashboard' ? 'text-blue-600 font-semibold' : ''}`}
+                className={`nav-button ${currentPage === 'dashboard' ? 'nav-button-active' : ''}`}
               >
-                Dashboard
+                📊 Dashboard
               </button>
             )}
             {user && user.role === 'manager' && (
               <button
                 onClick={() => setCurrentPage('register-school')}
-                className={`text-gray-700 hover:text-blue-600 ${currentPage === 'register-school' ? 'text-blue-600 font-semibold' : ''}`}
+                className={`nav-button ${currentPage === 'register-school' ? 'nav-button-active' : ''}`}
               >
-                Register School
+                🏫 Register School
               </button>
             )}
             {user ? (
               <div className="flex items-center space-x-4">
-                <span className="text-gray-700">Welcome, {user.first_name}!</span>
-                <span className="text-sm text-blue-600 capitalize">({user.role})</span>
+                <div className="text-center">
+                  <span className="text-gray-700 font-medium">Welcome, {user.first_name}!</span>
+                  <div className="text-xs text-blue-600 capitalize bg-blue-100 px-2 py-1 rounded-full">
+                    {user.role}
+                  </div>
+                </div>
                 <button
                   onClick={handleLogout}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+                  className="bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg"
                 >
                   Logout
                 </button>
@@ -359,7 +365,7 @@ function App() {
             ) : (
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+                className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg"
               >
                 Login
               </button>
@@ -371,92 +377,212 @@ function App() {
   );
 
   const renderHomePage = () => (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen">
       {renderNavigation()}
 
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold text-gray-900 mb-6">
-            Find the Best Driving Schools in Algeria
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Connect with certified driving instructors across all 58 wilayas. 
-            Learn theory, practice parking, and master road driving with professional guidance.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={() => {
-                setCurrentPage('find-schools');
-                fetchDrivingSchools();
-              }}
-              className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors"
-            >
-              🔍 Find Driving Schools
-            </button>
-            {user && user.role === 'manager' && (
-              <button
-                onClick={() => setCurrentPage('register-school')}
-                className="bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors"
-              >
-                🏫 Register Your School
-              </button>
-            )}
-            {user && (
+      <section 
+        className="relative min-h-screen flex items-center justify-center"
+        style={{
+          backgroundImage: `linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(147, 51, 234, 0.7)), url('https://images.pexels.com/photos/593172/pexels-photo-593172.jpeg')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed'
+        }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20"></div>
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="animate-fade-in">
+            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+              Master the Road with
+              <span className="block bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+                EcoleDZ
+              </span>
+            </h1>
+            <p className="text-xl md:text-2xl text-blue-100 mb-8 max-w-4xl mx-auto leading-relaxed">
+              Your Journey to Independence Starts Here! 🇩🇿
+              <br />
+              Connect with certified driving instructors across all 58 wilayas of Algeria. 
+              Learn theory, master parking, and conquer the roads with professional guidance.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mt-12">
               <button
                 onClick={() => {
-                  setCurrentPage('dashboard');
-                  fetchDashboardData();
+                  setCurrentPage('find-schools');
+                  fetchDrivingSchools();
                 }}
-                className="bg-purple-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-purple-700 transition-colors"
+                className="hero-button hero-button-primary"
               >
-                📊 My Dashboard
+                🔍 Find Your Perfect School
               </button>
-            )}
+              {user && user.role === 'manager' && (
+                <button
+                  onClick={() => setCurrentPage('register-school')}
+                  className="hero-button hero-button-secondary"
+                >
+                  🏫 Register Your School
+                </button>
+              )}
+              {user && (
+                <button
+                  onClick={() => {
+                    setCurrentPage('dashboard');
+                    fetchDashboardData();
+                  }}
+                  className="hero-button hero-button-tertiary"
+                >
+                  📊 My Dashboard
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Floating Animation */}
+        <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 text-white animate-bounce">
+          <div className="text-2xl">👇</div>
+          <p className="text-sm">Discover More</p>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20 bg-gradient-to-br from-gray-50 to-blue-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+              Why Choose <span className="text-blue-600">EcoleDZ</span>?
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Experience the future of driving education in Algeria
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="feature-card group">
+              <div className="feature-icon-container">
+                <div className="text-5xl mb-4 group-hover:animate-pulse">🎯</div>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Complete Learning Path</h3>
+              <p className="text-gray-600 leading-relaxed">
+                Master all aspects of driving with our comprehensive curriculum: 
+                Theory lessons, Parking practice, and Real road experience designed to make you a confident, safe driver.
+              </p>
+              <div className="mt-6">
+                <div className="flex flex-wrap gap-2">
+                  <span className="feature-badge">📚 Theory</span>
+                  <span className="feature-badge">🅿️ Parking</span>
+                  <span className="feature-badge">🛣️ Road</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="feature-card group">
+              <div className="feature-icon-container">
+                <div className="text-5xl mb-4 group-hover:animate-pulse">👨‍🏫</div>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Certified Instructors</h3>
+              <p className="text-gray-600 leading-relaxed">
+                Learn from qualified, professional male and female instructors across Algeria. 
+                Our certified teachers provide personalized instruction tailored to your learning style.
+              </p>
+              <div className="mt-6">
+                <div className="flex flex-wrap gap-2">
+                  <span className="feature-badge">✅ Certified</span>
+                  <span className="feature-badge">👨‍🏫 Professional</span>
+                  <span className="feature-badge">⭐ Rated</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="feature-card group">
+              <div className="feature-icon-container">
+                <div className="text-5xl mb-4 group-hover:animate-pulse">💳</div>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Easy Payment</h3>
+              <p className="text-gray-600 leading-relaxed">
+                Secure, convenient online payment system with BaridiMob integration. 
+                Transparent pricing with no hidden fees - pay safely and start learning immediately.
+              </p>
+              <div className="mt-6">
+                <div className="flex flex-wrap gap-2">
+                  <span className="feature-badge">🔒 Secure</span>
+                  <span className="feature-badge">📱 BaridiMob</span>
+                  <span className="feature-badge">💰 Transparent</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="bg-white py-20">
+      {/* Stats Section */}
+      <section className="py-16 bg-gradient-to-r from-blue-600 to-purple-600">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-            Why Choose EcoleDZ?
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="text-4xl mb-4">🎯</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Complete Learning Path</h3>
-              <p className="text-gray-600">Theory, Park, and Road courses designed to make you a confident driver</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div className="stat-item">
+              <div className="text-4xl md:text-5xl font-bold text-white">58</div>
+              <div className="text-blue-100 mt-2">Wilayas Covered</div>
             </div>
-            <div className="text-center">
-              <div className="text-4xl mb-4">👨‍🏫</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Certified Instructors</h3>
-              <p className="text-gray-600">Learn from qualified male and female instructors across Algeria</p>
+            <div className="stat-item">
+              <div className="text-4xl md:text-5xl font-bold text-white">1000+</div>
+              <div className="text-blue-100 mt-2">Happy Students</div>
             </div>
-            <div className="text-center">
-              <div className="text-4xl mb-4">💳</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Easy Payment</h3>
-              <p className="text-gray-600">Secure online payment with BaridiMob integration</p>
+            <div className="stat-item">
+              <div className="text-4xl md:text-5xl font-bold text-white">200+</div>
+              <div className="text-blue-100 mt-2">Certified Instructors</div>
+            </div>
+            <div className="stat-item">
+              <div className="text-4xl md:text-5xl font-bold text-white">95%</div>
+              <div className="text-blue-100 mt-2">Success Rate</div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 bg-gradient-to-br from-gray-900 to-blue-900">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+            Ready to Start Your Journey?
+          </h2>
+          <p className="text-xl text-gray-300 mb-8">
+            Join thousands of successful drivers who learned with EcoleDZ
+          </p>
+          <button
+            onClick={() => {
+              setCurrentPage('find-schools');
+              fetchDrivingSchools();
+            }}
+            className="bg-gradient-to-r from-yellow-400 to-orange-500 text-gray-900 px-8 py-4 rounded-lg text-xl font-bold hover:from-yellow-300 hover:to-orange-400 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+          >
+            🚀 Start Learning Today
+          </button>
         </div>
       </section>
     </div>
   );
 
   const renderFindSchools = () => (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {renderNavigation()}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+            Find Your Perfect <span className="text-blue-600">Driving School</span>
+          </h1>
+          <p className="text-xl text-gray-600">
+            Discover certified driving schools across Algeria's 58 wilayas
+          </p>
+        </div>
+
         {/* State Filter */}
         <div className="mb-8">
-          <div className="max-w-md">
+          <div className="max-w-md mx-auto">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filter by State (Wilaya)
+              🗺️ Filter by State (Wilaya)
             </label>
             <select
               value={selectedState}
@@ -464,7 +590,7 @@ function App() {
                 setSelectedState(e.target.value);
                 fetchDrivingSchools(e.target.value);
               }}
-              className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              className="select-modern"
             >
               <option value="">All States</option>
               {states.map((state) => (
@@ -477,57 +603,85 @@ function App() {
         {/* Loading State */}
         {loading && (
           <div className="text-center py-12">
-            <div className="text-2xl mb-4">⏳</div>
-            <p className="text-gray-600">Loading driving schools...</p>
+            <div className="loading-spinner mx-auto mb-4"></div>
+            <p className="text-gray-600 text-lg">Finding the best driving schools...</p>
           </div>
         )}
 
         {/* Driving Schools List */}
         <div className="grid gap-6">
           {!loading && drivingSchools.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-4xl mb-4">🏫</div>
-              <p className="text-gray-600">No driving schools found in {selectedState || 'Algeria'}.</p>
-              <p className="text-sm text-gray-500 mt-2">Try selecting a different state or check back later.</p>
+            <div className="empty-state">
+              <div className="text-6xl mb-4">🏫</div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">No driving schools found</h3>
+              <p className="text-gray-600 mb-4">
+                No driving schools found in {selectedState || 'Algeria'}.
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                Try selecting a different state or check back later.
+              </p>
+              <button
+                onClick={() => {
+                  setSelectedState('');
+                  fetchDrivingSchools();
+                }}
+                className="btn-primary"
+              >
+                View All Schools
+              </button>
             </div>
           ) : (
             drivingSchools.map((school) => (
-              <div key={school.id} className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow">
+              <div key={school.id} className="school-card-modern">
                 <div className="p-6">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold text-gray-900">{school.name}</h3>
-                      <p className="text-gray-600 mt-1">{school.address}, {school.state}</p>
-                      <p className="text-gray-700 mt-2">{school.description}</p>
-                      
-                      <div className="flex items-center mt-3 space-x-4">
-                        <div className="flex items-center">
-                          <span className="text-yellow-400">⭐</span>
-                          <span className="ml-1 text-gray-600">{school.rating.toFixed(1)} ({school.total_reviews} reviews)</span>
+                      <div className="flex items-center mb-2">
+                        <h3 className="text-2xl font-bold text-gray-900">{school.name}</h3>
+                        <div className="ml-4 flex items-center">
+                          <span className="text-yellow-400 text-lg">⭐</span>
+                          <span className="ml-1 text-gray-600 font-medium">
+                            {school.rating.toFixed(1)} ({school.total_reviews})
+                          </span>
                         </div>
-                        <div className="text-green-600 font-semibold">
+                      </div>
+                      
+                      <p className="text-gray-600 mb-3 flex items-center">
+                        <span className="mr-2">📍</span>
+                        {school.address}, {school.state}
+                      </p>
+                      
+                      <p className="text-gray-700 mb-4 leading-relaxed">{school.description}</p>
+                      
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-6 text-sm text-gray-600">
+                          <span className="flex items-center">
+                            <span className="mr-1">📞</span>
+                            {school.phone}
+                          </span>
+                          <span className="flex items-center">
+                            <span className="mr-1">📧</span>
+                            {school.email}
+                          </span>
+                        </div>
+                        <div className="price-badge-modern">
                           {school.price.toLocaleString()} DZD
                         </div>
                       </div>
-                      
-                      <div className="flex items-center mt-2 text-gray-600">
-                        <span>📞 {school.phone}</span>
-                        <span className="ml-4">📧 {school.email}</span>
-                      </div>
                     </div>
                     
-                    <div className="ml-6 flex flex-col space-y-2">
+                    <div className="ml-6 flex flex-col space-y-2 min-w-[140px]">
                       <button
                         onClick={() => setSelectedSchool(school)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        className="btn-secondary-modern"
                       >
-                        View Details
+                        👁️ View Details
                       </button>
                       <button
                         onClick={() => handleEnroll(school.id)}
-                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                        className="btn-primary-modern"
                       >
-                        Enroll Now
+                        🎓 Enroll Now
                       </button>
                     </div>
                   </div>
@@ -541,33 +695,41 @@ function App() {
   );
 
   const renderRegisterSchool = () => (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {renderNavigation()}
 
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Register Your Driving School</h2>
-          
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Register Your <span className="text-blue-600">Driving School</span>
+          </h1>
+          <p className="text-xl text-gray-600">
+            Join our network of certified driving schools across Algeria
+          </p>
+        </div>
+
+        <div className="form-container-modern">
           <form onSubmit={handleSchoolSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">School Name</label>
+              <div className="form-group">
+                <label className="form-label">🏫 School Name</label>
                 <input
                   type="text"
                   required
                   value={schoolForm.name}
                   onChange={(e) => setSchoolForm({...schoolForm, name: e.target.value})}
-                  className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="input-modern"
+                  placeholder="Enter your school name"
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">State (Wilaya)</label>
+              <div className="form-group">
+                <label className="form-label">🗺️ State (Wilaya)</label>
                 <select
                   required
                   value={schoolForm.state}
                   onChange={(e) => setSchoolForm({...schoolForm, state: e.target.value})}
-                  className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="select-modern"
                 >
                   <option value="">Select State</option>
                   {states.map((state) => (
@@ -577,68 +739,73 @@ function App() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+            <div className="form-group">
+              <label className="form-label">📍 Address</label>
               <input
                 type="text"
                 required
                 value={schoolForm.address}
                 onChange={(e) => setSchoolForm({...schoolForm, address: e.target.value})}
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="input-modern"
+                placeholder="Enter complete address"
               />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+              <div className="form-group">
+                <label className="form-label">📞 Phone</label>
                 <input
                   type="tel"
                   required
                   value={schoolForm.phone}
                   onChange={(e) => setSchoolForm({...schoolForm, phone: e.target.value})}
-                  className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="input-modern"
+                  placeholder="+213..."
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+              <div className="form-group">
+                <label className="form-label">📧 Email</label>
                 <input
                   type="email"
                   required
                   value={schoolForm.email}
                   onChange={(e) => setSchoolForm({...schoolForm, email: e.target.value})}
-                  className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="input-modern"
+                  placeholder="school@example.com"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Price (DZD)</label>
+            <div className="form-group">
+              <label className="form-label">💰 Price (DZD)</label>
               <input
                 type="number"
                 required
                 value={schoolForm.price}
                 onChange={(e) => setSchoolForm({...schoolForm, price: e.target.value})}
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="input-modern"
+                placeholder="Enter course price"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+            <div className="form-group">
+              <label className="form-label">📝 Description</label>
               <textarea
                 required
                 rows={4}
                 value={schoolForm.description}
                 onChange={(e) => setSchoolForm({...schoolForm, description: e.target.value})}
-                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="input-modern"
+                placeholder="Describe your driving school, facilities, and what makes it special..."
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              className="btn-submit-modern"
             >
-              Create Driving School
+              🏫 Create Driving School
             </button>
           </form>
         </div>
@@ -650,17 +817,17 @@ function App() {
     if (!user) return null;
 
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
         {renderNavigation()}
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">
-              {user.role === 'student' && 'Student Dashboard'}
-              {user.role === 'manager' && 'Manager Dashboard'}
-              {user.role === 'teacher' && 'Teacher Dashboard'}
+          <div className="mb-8 text-center">
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-2">
+              {user.role === 'student' && '🎓 Student Dashboard'}
+              {user.role === 'manager' && '🏫 Manager Dashboard'}
+              {user.role === 'teacher' && '👨‍🏫 Teacher Dashboard'}
             </h1>
-            <p className="text-gray-600 mt-2">Welcome back, {user.first_name}!</p>
+            <p className="text-xl text-gray-600">Welcome back, {user.first_name}!</p>
           </div>
 
           {/* Dashboard Content */}
@@ -672,8 +839,8 @@ function App() {
             </>
           ) : (
             <div className="text-center py-12">
-              <div className="text-2xl mb-4">⏳</div>
-              <p className="text-gray-600">Loading dashboard...</p>
+              <div className="loading-spinner mx-auto mb-4"></div>
+              <p className="text-gray-600 text-lg">Loading your dashboard...</p>
             </div>
           )}
         </div>
@@ -685,99 +852,100 @@ function App() {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="stat-card">
           <div className="flex items-center">
-            <div className="text-2xl mr-3">🏫</div>
+            <div className="stat-icon bg-blue-100 text-blue-600">🏫</div>
             <div>
-              <p className="text-sm text-gray-600">Total Enrollments</p>
-              <p className="text-2xl font-bold text-gray-900">{dashboardData.total_enrollments}</p>
+              <p className="stat-label">Total Enrollments</p>
+              <p className="stat-value">{dashboardData.total_enrollments}</p>
             </div>
           </div>
         </div>
         
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="stat-card">
           <div className="flex items-center">
-            <div className="text-2xl mr-3">✅</div>
+            <div className="stat-icon bg-green-100 text-green-600">✅</div>
             <div>
-              <p className="text-sm text-gray-600">Active Enrollments</p>
-              <p className="text-2xl font-bold text-green-600">{dashboardData.active_enrollments}</p>
+              <p className="stat-label">Active Enrollments</p>
+              <p className="stat-value">{dashboardData.active_enrollments}</p>
             </div>
           </div>
         </div>
         
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="stat-card">
           <div className="flex items-center">
-            <div className="text-2xl mr-3">💳</div>
+            <div className="stat-icon bg-orange-100 text-orange-600">💳</div>
             <div>
-              <p className="text-sm text-gray-600">Pending Payments</p>
-              <p className="text-2xl font-bold text-orange-600">{dashboardData.pending_payments}</p>
+              <p className="stat-label">Pending Payments</p>
+              <p className="stat-value">{dashboardData.pending_payments}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Enrollments */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">My Enrollments</h3>
-          
-          {dashboardData.enrollments.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="text-4xl mb-4">🎓</div>
-              <p className="text-gray-600">No enrollments found. Find a driving school to get started!</p>
-              <button
-                onClick={() => setCurrentPage('find-schools')}
-                className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-              >
-                Find Schools
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {dashboardData.enrollments.map((enrollment, index) => (
-                <div key={index} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">{enrollment.school.name}</h4>
-                      <p className="text-gray-600">{enrollment.school.address}, {enrollment.school.state}</p>
-                      <p className="text-sm text-gray-500">Enrolled: {new Date(enrollment.enrollment.created_at).toLocaleDateString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        enrollment.enrollment.payment_status === 'completed' ? 'bg-green-100 text-green-800' :
-                        enrollment.enrollment.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {enrollment.enrollment.payment_status}
-                      </span>
-                    </div>
+      <div className="dashboard-section">
+        <h3 className="section-title">My Enrollments</h3>
+        
+        {dashboardData.enrollments.length === 0 ? (
+          <div className="empty-state">
+            <div className="text-6xl mb-4">🎓</div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">No enrollments found</h3>
+            <p className="text-gray-600 mb-6">Find a driving school to get started!</p>
+            <button
+              onClick={() => setCurrentPage('find-schools')}
+              className="btn-primary"
+            >
+              Find Schools
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {dashboardData.enrollments.map((enrollment, index) => (
+              <div key={index} className="enrollment-card">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h4 className="text-xl font-bold text-gray-900">{enrollment.school.name}</h4>
+                    <p className="text-gray-600">{enrollment.school.address}, {enrollment.school.state}</p>
+                    <p className="text-sm text-gray-500">
+                      Enrolled: {new Date(enrollment.enrollment.created_at).toLocaleDateString()}
+                    </p>
                   </div>
-                  
-                  {/* Course Progress */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {['theory', 'park', 'road'].map((courseType) => (
-                      <div key={courseType} className="border rounded p-3">
-                        <h5 className="font-medium text-gray-900 capitalize mb-2">{courseType} Course</h5>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-                          <div 
-                            className="bg-blue-600 h-2.5 rounded-full" 
-                            style={{
-                              width: `${enrollment.progress[courseType].total > 0 ? 
-                                (enrollment.progress[courseType].completed / enrollment.progress[courseType].total) * 100 : 0}%`
-                            }}
-                          ></div>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {enrollment.progress[courseType].completed} / {enrollment.progress[courseType].total} sessions
-                        </p>
-                      </div>
-                    ))}
+                  <div className="text-right">
+                    <span className={`status-badge ${
+                      enrollment.enrollment.payment_status === 'completed' ? 'status-completed' :
+                      enrollment.enrollment.payment_status === 'pending' ? 'status-pending' :
+                      'status-failed'
+                    }`}>
+                      {enrollment.enrollment.payment_status}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                
+                {/* Course Progress */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {['theory', 'park', 'road'].map((courseType) => (
+                    <div key={courseType} className="progress-card">
+                      <h5 className="font-medium text-gray-900 capitalize mb-2">{courseType} Course</h5>
+                      <div className="progress-bar mb-2">
+                        <div 
+                          className="progress-fill" 
+                          style={{
+                            width: `${enrollment.progress[courseType].total > 0 ? 
+                              (enrollment.progress[courseType].completed / enrollment.progress[courseType].total) * 100 : 0}%`
+                          }}
+                        ></div>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {enrollment.progress[courseType].completed} / {enrollment.progress[courseType].total} sessions
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -785,14 +953,14 @@ function App() {
   const renderManagerDashboard = () => (
     <div className="space-y-6">
       {dashboardData.message ? (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <div className="info-card">
           <div className="text-center">
-            <div className="text-4xl mb-4">🏫</div>
-            <h3 className="text-lg font-medium text-blue-900 mb-2">No Driving School Found</h3>
-            <p className="text-blue-700 mb-4">{dashboardData.message}</p>
+            <div className="text-6xl mb-4">🏫</div>
+            <h3 className="text-2xl font-bold text-blue-900 mb-2">No Driving School Found</h3>
+            <p className="text-blue-700 mb-6">{dashboardData.message}</p>
             <button
               onClick={() => setCurrentPage('register-school')}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+              className="btn-primary"
             >
               Create Driving School
             </button>
@@ -801,12 +969,12 @@ function App() {
       ) : (
         <>
           {/* School Info */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">School Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="dashboard-section">
+            <h3 className="section-title">School Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-gray-600">School Name</p>
-                <p className="font-medium">{dashboardData.school.name}</p>
+                <p className="font-bold text-lg">{dashboardData.school.name}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Location</p>
@@ -814,7 +982,7 @@ function App() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Price</p>
-                <p className="font-medium text-green-600">{dashboardData.school.price.toLocaleString()} DZD</p>
+                <p className="font-bold text-green-600 text-lg">{dashboardData.school.price.toLocaleString()} DZD</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Rating</p>
@@ -825,77 +993,75 @@ function App() {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="stat-card">
               <div className="flex items-center">
-                <div className="text-2xl mr-3">👥</div>
+                <div className="stat-icon bg-blue-100 text-blue-600">👥</div>
                 <div>
-                  <p className="text-sm text-gray-600">Total Students</p>
-                  <p className="text-2xl font-bold text-gray-900">{dashboardData.total_students}</p>
+                  <p className="stat-label">Total Students</p>
+                  <p className="stat-value">{dashboardData.total_students}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="stat-card">
               <div className="flex items-center">
-                <div className="text-2xl mr-3">✅</div>
+                <div className="stat-icon bg-green-100 text-green-600">✅</div>
                 <div>
-                  <p className="text-sm text-gray-600">Active Students</p>
-                  <p className="text-2xl font-bold text-green-600">{dashboardData.active_students}</p>
+                  <p className="stat-label">Active Students</p>
+                  <p className="stat-value">{dashboardData.active_students}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="stat-card">
               <div className="flex items-center">
-                <div className="text-2xl mr-3">⏳</div>
+                <div className="stat-icon bg-orange-100 text-orange-600">⏳</div>
                 <div>
-                  <p className="text-sm text-gray-600">Pending Approvals</p>
-                  <p className="text-2xl font-bold text-orange-600">{dashboardData.pending_approvals}</p>
+                  <p className="stat-label">Pending Approvals</p>
+                  <p className="stat-value">{dashboardData.pending_approvals}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="stat-card">
               <div className="flex items-center">
-                <div className="text-2xl mr-3">👨‍🏫</div>
+                <div className="stat-icon bg-purple-100 text-purple-600">👨‍🏫</div>
                 <div>
-                  <p className="text-sm text-gray-600">Teachers</p>
-                  <p className="text-2xl font-bold text-blue-600">{dashboardData.total_teachers}</p>
+                  <p className="stat-label">Teachers</p>
+                  <p className="stat-value">{dashboardData.total_teachers}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Teachers */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Teachers</h3>
-              {dashboardData.teachers.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-4">👨‍🏫</div>
-                  <p className="text-gray-600">No teachers added yet.</p>
-                  <p className="text-sm text-gray-500 mt-2">Add teachers to start offering courses.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {dashboardData.teachers.map((teacher, index) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="text-2xl">👨‍🏫</div>
-                        <div>
-                          <p className="font-medium">{teacher.user_id}</p>
-                          <p className="text-sm text-gray-600">
-                            Can teach: {teacher.can_teach_male && teacher.can_teach_female ? 'All genders' :
-                              teacher.can_teach_female ? 'Female only' : 'Male only'}
-                          </p>
-                          <p className="text-sm text-gray-600">⭐ {teacher.rating.toFixed(1)} rating</p>
-                        </div>
+          <div className="dashboard-section">
+            <h3 className="section-title">Teachers</h3>
+            {dashboardData.teachers.length === 0 ? (
+              <div className="empty-state">
+                <div className="text-6xl mb-4">👨‍🏫</div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">No teachers added yet</h3>
+                <p className="text-gray-600">Add teachers to start offering courses.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {dashboardData.teachers.map((teacher, index) => (
+                  <div key={index} className="teacher-card">
+                    <div className="flex items-center space-x-4">
+                      <div className="text-3xl">👨‍🏫</div>
+                      <div>
+                        <p className="font-bold text-lg">{teacher.user_id}</p>
+                        <p className="text-sm text-gray-600">
+                          Can teach: {teacher.can_teach_male && teacher.can_teach_female ? 'All genders' :
+                            teacher.can_teach_female ? 'Female only' : 'Male only'}
+                        </p>
+                        <p className="text-sm text-gray-600">⭐ {teacher.rating.toFixed(1)} rating</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -905,10 +1071,10 @@ function App() {
   const renderTeacherDashboard = () => (
     <div className="space-y-6">
       {dashboardData.message ? (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <div className="info-card">
           <div className="text-center">
-            <div className="text-4xl mb-4">👨‍🏫</div>
-            <h3 className="text-lg font-medium text-blue-900 mb-2">Teacher Profile Not Found</h3>
+            <div className="text-6xl mb-4">👨‍🏫</div>
+            <h3 className="text-2xl font-bold text-blue-900 mb-2">Teacher Profile Not Found</h3>
             <p className="text-blue-700">{dashboardData.message}</p>
           </div>
         </div>
@@ -916,72 +1082,79 @@ function App() {
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="stat-card">
               <div className="flex items-center">
-                <div className="text-2xl mr-3">📚</div>
+                <div className="stat-icon bg-blue-100 text-blue-600">📚</div>
                 <div>
-                  <p className="text-sm text-gray-600">Assigned Courses</p>
-                  <p className="text-2xl font-bold text-gray-900">{dashboardData.assigned_courses}</p>
+                  <p className="stat-label">Assigned Courses</p>
+                  <p className="stat-value">{dashboardData.assigned_courses}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="stat-card">
               <div className="flex items-center">
-                <div className="text-2xl mr-3">▶️</div>
+                <div className="stat-icon bg-green-100 text-green-600">▶️</div>
                 <div>
-                  <p className="text-sm text-gray-600">Active Courses</p>
-                  <p className="text-2xl font-bold text-green-600">{dashboardData.active_courses}</p>
+                  <p className="stat-label">Active Courses</p>
+                  <p className="stat-value">{dashboardData.active_courses}</p>
                 </div>
               </div>
             </div>
             
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="stat-card">
               <div className="flex items-center">
-                <div className="text-2xl mr-3">✅</div>
+                <div className="stat-icon bg-purple-100 text-purple-600">✅</div>
                 <div>
-                  <p className="text-sm text-gray-600">Completed Courses</p>
-                  <p className="text-2xl font-bold text-blue-600">{dashboardData.completed_courses}</p>
+                  <p className="stat-label">Completed Courses</p>
+                  <p className="stat-value">{dashboardData.completed_courses}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Courses */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">My Courses</h3>
-              {dashboardData.courses.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-4">📚</div>
-                  <p className="text-gray-600">No courses assigned yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {dashboardData.courses.map((course, index) => (
-                    <div key={index} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-semibold text-gray-900 capitalize">{course.course_type} Course</h4>
-                          <p className="text-gray-600">Student: {course.student.first_name} {course.student.last_name}</p>
-                          <p className="text-gray-600">School: {course.school.name}</p>
-                          <p className="text-sm text-gray-500">
-                            Progress: {course.completed_sessions} / {course.total_sessions} sessions
-                          </p>
+          <div className="dashboard-section">
+            <h3 className="section-title">My Courses</h3>
+            {dashboardData.courses.length === 0 ? (
+              <div className="empty-state">
+                <div className="text-6xl mb-4">📚</div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">No courses assigned yet</h3>
+                <p className="text-gray-600">Courses will appear here when assigned by your school.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {dashboardData.courses.map((course, index) => (
+                  <div key={index} className="course-card">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-xl font-bold text-gray-900 capitalize">{course.course_type} Course</h4>
+                        <p className="text-gray-600">Student: {course.student.first_name} {course.student.last_name}</p>
+                        <p className="text-gray-600">School: {course.school.name}</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          Progress: {course.completed_sessions} / {course.total_sessions} sessions
+                        </p>
+                        <div className="progress-bar mt-2" style={{width: '200px'}}>
+                          <div 
+                            className="progress-fill" 
+                            style={{
+                              width: `${course.total_sessions > 0 ? (course.completed_sessions / course.total_sessions) * 100 : 0}%`
+                            }}
+                          ></div>
                         </div>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          course.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          course.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {course.status.replace('_', ' ')}
-                        </span>
                       </div>
+                      <span className={`status-badge ${
+                        course.status === 'completed' ? 'status-completed' :
+                        course.status === 'in_progress' ? 'status-pending' :
+                        'status-failed'
+                      }`}>
+                        {course.status.replace('_', ' ')}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -989,15 +1162,15 @@ function App() {
   );
 
   const renderSchoolDetailsModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-8 max-w-2xl w-full mx-4 max-h-screen overflow-y-auto">
+    <div className="modal-backdrop">
+      <div className="modal-container">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
+          <h2 className="text-3xl font-bold text-gray-900">
             {selectedSchool.name}
           </h2>
           <button
             onClick={() => setSelectedSchool(null)}
-            className="text-gray-400 hover:text-gray-600 text-2xl"
+            className="text-gray-400 hover:text-gray-600 text-3xl font-bold"
           >
             ✕
           </button>
@@ -1006,7 +1179,7 @@ function App() {
         <div className="space-y-6">
           {/* Basic Info */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">School Information</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-4">School Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-600">Location</p>
@@ -1014,7 +1187,7 @@ function App() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Price</p>
-                <p className="font-medium text-green-600">{selectedSchool.price.toLocaleString()} DZD</p>
+                <p className="font-bold text-green-600 text-lg">{selectedSchool.price.toLocaleString()} DZD</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Phone</p>
@@ -1029,11 +1202,11 @@ function App() {
 
           {/* Rating */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Rating & Reviews</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Rating & Reviews</h3>
             <div className="flex items-center space-x-4">
               <div className="flex items-center">
-                <span className="text-yellow-400 text-xl">⭐</span>
-                <span className="ml-2 text-lg font-semibold">{selectedSchool.rating.toFixed(1)}</span>
+                <span className="text-yellow-400 text-2xl">⭐</span>
+                <span className="ml-2 text-xl font-bold">{selectedSchool.rating.toFixed(1)}</span>
               </div>
               <span className="text-gray-600">({selectedSchool.total_reviews} reviews)</span>
             </div>
@@ -1041,29 +1214,29 @@ function App() {
 
           {/* Description */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">About</h3>
-            <p className="text-gray-700">{selectedSchool.description}</p>
+            <h3 className="text-xl font-bold text-gray-900 mb-4">About</h3>
+            <p className="text-gray-700 leading-relaxed">{selectedSchool.description}</p>
           </div>
 
           {/* Teachers */}
           {selectedSchool.teachers && selectedSchool.teachers.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Instructors</h3>
-              <div className="grid gap-3">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Instructors</h3>
+              <div className="grid gap-4">
                 {selectedSchool.teachers.map((teacher, index) => (
-                  <div key={teacher.id || index} className="border rounded-lg p-3">
+                  <div key={teacher.id || index} className="teacher-card">
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-medium">{teacher.user ? `${teacher.user.first_name} ${teacher.user.last_name}` : teacher.user_id}</p>
+                        <p className="font-bold text-lg">{teacher.user ? `${teacher.user.first_name} ${teacher.user.last_name}` : teacher.user_id}</p>
                         <p className="text-sm text-gray-600">
-                          👨‍🏫 Instructor
+                          👨‍🏫 Certified Instructor
                         </p>
-                        <p className="text-sm text-gray-600">Licensed Teacher</p>
+                        <p className="text-sm text-gray-600">Licensed Professional</p>
                       </div>
                       <div className="text-right">
                         <div className="flex items-center">
                           <span className="text-yellow-400">⭐</span>
-                          <span className="ml-1 text-sm">{teacher.rating ? teacher.rating.toFixed(1) : '5.0'}</span>
+                          <span className="ml-1 text-sm font-bold">{teacher.rating ? teacher.rating.toFixed(1) : '5.0'}</span>
                         </div>
                       </div>
                     </div>
@@ -1074,19 +1247,19 @@ function App() {
           )}
 
           {/* Action Buttons */}
-          <div className="flex space-x-4">
+          <div className="flex space-x-4 pt-6">
             <button
               onClick={() => {
                 setSelectedSchool(null);
                 handleEnroll(selectedSchool.id);
               }}
-              className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+              className="btn-primary flex-1"
             >
-              Enroll Now
+              🎓 Enroll Now
             </button>
             <button
               onClick={() => setSelectedSchool(null)}
-              className="flex-1 bg-gray-600 text-white py-3 px-6 rounded-lg hover:bg-gray-700 transition-colors font-semibold"
+              className="btn-secondary flex-1"
             >
               Close
             </button>
@@ -1097,119 +1270,119 @@ function App() {
   );
 
   const renderAuthModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4 max-h-screen overflow-y-auto">
+    <div className="modal-backdrop">
+      <div className="modal-container max-w-md">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {authMode === 'login' ? 'Login' : 'Register'}
+          <h2 className="text-3xl font-bold text-gray-900">
+            {authMode === 'login' ? '🔐 Login' : '📝 Register'}
           </h2>
           <button
             onClick={() => setShowAuthModal(false)}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 text-2xl"
           >
             ✕
           </button>
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
+          <div className="form-group">
+            <label className="form-label">📧 Email</label>
             <input
               type="email"
               required
               value={authData.email}
               onChange={(e) => setAuthData({...authData, email: e.target.value})}
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+              className="input-modern"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+          <div className="form-group">
+            <label className="form-label">🔒 Password</label>
             <input
               type="password"
               required
               value={authData.password}
               onChange={(e) => setAuthData({...authData, password: e.target.value})}
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+              className="input-modern"
             />
           </div>
 
           {authMode === 'register' && (
             <>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">First Name</label>
+                <div className="form-group">
+                  <label className="form-label">👤 First Name</label>
                   <input
                     type="text"
                     required
                     value={authData.first_name}
                     onChange={(e) => setAuthData({...authData, first_name: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+                    className="input-modern"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                <div className="form-group">
+                  <label className="form-label">👤 Last Name</label>
                   <input
                     type="text"
                     required
                     value={authData.last_name}
                     onChange={(e) => setAuthData({...authData, last_name: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+                    className="input-modern"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Phone</label>
+              <div className="form-group">
+                <label className="form-label">📞 Phone</label>
                 <input
                   type="tel"
                   required
                   value={authData.phone}
                   onChange={(e) => setAuthData({...authData, phone: e.target.value})}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+                  className="input-modern"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Address</label>
+              <div className="form-group">
+                <label className="form-label">📍 Address</label>
                 <input
                   type="text"
                   required
                   value={authData.address}
                   onChange={(e) => setAuthData({...authData, address: e.target.value})}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+                  className="input-modern"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
+              <div className="form-group">
+                <label className="form-label">📅 Date of Birth</label>
                 <input
                   type="date"
                   required
                   value={authData.date_of_birth}
                   onChange={(e) => setAuthData({...authData, date_of_birth: e.target.value})}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+                  className="input-modern"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Gender</label>
+                <div className="form-group">
+                  <label className="form-label">⚧ Gender</label>
                   <select
                     value={authData.gender}
                     onChange={(e) => setAuthData({...authData, gender: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+                    className="select-modern"
                   >
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Role</label>
+                <div className="form-group">
+                  <label className="form-label">👨‍💼 Role</label>
                   <select
                     value={authData.role}
                     onChange={(e) => setAuthData({...authData, role: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 px-3 py-2 border"
+                    className="select-modern"
                   >
                     <option value="student">Student</option>
                     <option value="teacher">Teacher</option>
@@ -1223,27 +1396,23 @@ function App() {
           <button
             type="submit"
             disabled={authLoading}
-            className={`w-full py-2 px-4 rounded-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              authLoading 
-                ? 'bg-gray-400 text-gray-700 cursor-not-allowed' 
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
+            className={`btn-submit-modern ${authLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {authLoading ? (
               <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <div className="loading-spinner-small mr-2"></div>
                 {authMode === 'login' ? 'Logging in...' : 'Registering...'}
               </div>
             ) : (
-              authMode === 'login' ? 'Login' : 'Register'
+              authMode === 'login' ? '🔐 Login' : '📝 Register'
             )}
           </button>
         </form>
 
-        <div className="mt-4 text-center">
+        <div className="mt-6 text-center">
           <button
             onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-            className="text-blue-600 hover:text-blue-800"
+            className="text-blue-600 hover:text-blue-800 font-medium"
           >
             {authMode === 'login' 
               ? "Don't have an account? Register"
