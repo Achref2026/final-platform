@@ -2,7 +2,7 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi import FastAPI, HTTPException, status, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
@@ -10,6 +10,12 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 import jwt
 from enum import Enum
+import requests
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+import aiofiles
+import json
 
 # Initialize FastAPI app
 app = FastAPI(title="Driving School Platform API")
@@ -33,6 +39,17 @@ security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 ALGORITHM = "HS256"
+
+# Daily.co API setup
+DAILY_API_KEY = os.environ.get('DAILY_API_KEY')
+DAILY_API_URL = os.environ.get('DAILY_API_URL', 'https://api.daily.co/v1')
+
+# Cloudinary setup
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET')
+)
 
 # Enums
 class UserRole(str, Enum):
@@ -64,6 +81,13 @@ class ExamStatus(str, Enum):
     NOT_TAKEN = "not_taken"
     PASSED = "passed"
     FAILED = "failed"
+
+class DocumentType(str, Enum):
+    PROFILE_PHOTO = "profile_photo"
+    ID_CARD = "id_card"
+    MEDICAL_CERTIFICATE = "medical_certificate"
+    DRIVING_LICENSE = "driving_license"
+    TEACHING_LICENSE = "teaching_license"
 
 # Pydantic Models
 class UserBase(BaseModel):
@@ -174,7 +198,31 @@ class CourseSession(BaseModel):
     duration_minutes: int
     status: str  # scheduled, completed, cancelled
     notes: Optional[str] = None
+    daily_room_url: Optional[str] = None
+    daily_room_name: Optional[str] = None
+    recording_url: Optional[str] = None
     created_at: datetime
+
+class CourseSessionCreate(BaseModel):
+    course_id: str
+    scheduled_time: datetime
+    duration_minutes: int = 60
+
+class VideoRoomCreate(BaseModel):
+    room_name: str
+    course_id: str
+    privacy: str = "private"
+    properties: dict = {}
+
+class DocumentUpload(BaseModel):
+    id: str
+    user_id: str
+    document_type: DocumentType
+    file_url: str
+    file_name: str
+    file_size: int
+    upload_date: datetime
+    is_verified: bool = False
 
 class Quiz(BaseModel):
     id: str
@@ -289,6 +337,98 @@ async def create_default_courses(enrollment_id: str):
     
     await db.courses.insert_many(courses)
     return courses
+
+# Daily.co API functions
+async def create_daily_room(room_name: str, properties: dict = None):
+    """Create a Daily.co video room"""
+    if not DAILY_API_KEY:
+        raise HTTPException(status_code=500, detail="Daily.co API key not configured")
+    
+    if properties is None:
+        properties = {
+            "enable_screenshare": True,
+            "enable_chat": True,
+            "start_video_off": False,
+            "start_audio_off": False,
+            "max_participants": 10
+        }
+    
+    headers = {
+        "Authorization": f"Bearer {DAILY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "name": room_name,
+        "privacy": "private",
+        "properties": properties
+    }
+    
+    try:
+        response = requests.post(f"{DAILY_API_URL}/rooms", json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create Daily.co room: {str(e)}")
+
+async def get_daily_room(room_name: str):
+    """Get Daily.co room information"""
+    if not DAILY_API_KEY:
+        raise HTTPException(status_code=500, detail="Daily.co API key not configured")
+    
+    headers = {
+        "Authorization": f"Bearer {DAILY_API_KEY}"
+    }
+    
+    try:
+        response = requests.get(f"{DAILY_API_URL}/rooms/{room_name}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get Daily.co room: {str(e)}")
+
+async def delete_daily_room(room_name: str):
+    """Delete Daily.co room"""
+    if not DAILY_API_KEY:
+        raise HTTPException(status_code=500, detail="Daily.co API key not configured")
+    
+    headers = {
+        "Authorization": f"Bearer {DAILY_API_KEY}"
+    }
+    
+    try:
+        response = requests.delete(f"{DAILY_API_URL}/rooms/{room_name}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete Daily.co room: {str(e)}")
+
+# Cloudinary upload function
+async def upload_to_cloudinary(file: UploadFile, folder: str, resource_type: str = "auto"):
+    """Upload file to Cloudinary"""
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        # Upload to Cloudinary
+        upload_result = cloudinary.uploader.upload(
+            file_content,
+            folder=folder,
+            resource_type=resource_type,
+            public_id=f"{str(uuid.uuid4())}_{file.filename}",
+            overwrite=True
+        )
+        
+        return {
+            "file_url": upload_result["secure_url"],
+            "public_id": upload_result["public_id"],
+            "file_size": upload_result.get("bytes", 0),
+            "format": upload_result.get("format", ""),
+            "width": upload_result.get("width"),
+            "height": upload_result.get("height")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 # API Routes
 
@@ -502,6 +642,229 @@ async def get_my_enrollments(current_user: dict = Depends(get_current_user)):
         enrollment["courses"] = serialize_doc(courses)
     
     return serialize_doc(enrollments)
+
+# Video Calling APIs
+
+@app.post("/api/video/create-room")
+async def create_video_room(room_data: VideoRoomCreate, current_user: dict = Depends(get_current_user)):
+    """Create a video room for a course session"""
+    if current_user["role"] not in ["teacher", "manager"]:
+        raise HTTPException(status_code=403, detail="Only teachers and managers can create video rooms")
+    
+    # Verify course exists and user has access
+    course = await db.courses.find_one({"id": room_data.course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # For teachers, verify they are assigned to this course
+    if current_user["role"] == "teacher":
+        if course["teacher_id"] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Not authorized to create room for this course")
+    
+    try:
+        # Create Daily.co room
+        room_info = await create_daily_room(room_data.room_name, room_data.properties)
+        
+        # Save room info to database
+        session_id = str(uuid.uuid4())
+        session_doc = {
+            "id": session_id,
+            "course_id": room_data.course_id,
+            "teacher_id": current_user["id"],
+            "student_id": course.get("student_id"),
+            "scheduled_time": datetime.utcnow(),
+            "duration_minutes": 60,
+            "status": "scheduled",
+            "daily_room_url": room_info["url"],
+            "daily_room_name": room_info["name"],
+            "notes": None,
+            "recording_url": None,
+            "created_at": datetime.utcnow()
+        }
+        
+        await db.course_sessions.insert_one(session_doc)
+        
+        return {
+            "session_id": session_id,
+            "room_url": room_info["url"],
+            "room_name": room_info["name"],
+            "message": "Video room created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create video room: {str(e)}")
+
+@app.get("/api/video/rooms/{course_id}")
+async def get_course_video_rooms(course_id: str, current_user: dict = Depends(get_current_user)):
+    """Get all video rooms for a course"""
+    # Verify course exists and user has access
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Get enrollment to check student access
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    # Check access rights
+    has_access = False
+    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "teacher" and course.get("teacher_id") == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "manager":
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        if school and school["manager_id"] == current_user["id"]:
+            has_access = True
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Not authorized to view course sessions")
+    
+    # Get course sessions
+    sessions_cursor = db.course_sessions.find({"course_id": course_id})
+    sessions = await sessions_cursor.to_list(length=None)
+    
+    return serialize_doc(sessions)
+
+@app.post("/api/video/join/{session_id}")
+async def join_video_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    """Get join URL for a video session"""
+    session = await db.course_sessions.find_one({"id": session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Verify access
+    course = await db.courses.find_one({"id": session["course_id"]})
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    
+    has_access = False
+    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "teacher" and session["teacher_id"] == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "manager":
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        if school and school["manager_id"] == current_user["id"]:
+            has_access = True
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Not authorized to join this session")
+    
+    return {
+        "room_url": session["daily_room_url"],
+        "room_name": session["daily_room_name"],
+        "session_id": session_id
+    }
+
+# Document Upload APIs
+
+@app.post("/api/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    document_type: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload a document (photo, ID card, medical certificate, etc.)"""
+    
+    # Validate document type
+    if document_type not in [dt.value for dt in DocumentType]:
+        raise HTTPException(status_code=400, detail="Invalid document type")
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, and PDF files are allowed")
+    
+    # Validate file size (max 10MB)
+    if file.size and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must be less than 10MB")
+    
+    try:
+        # Determine folder based on document type
+        folder = f"driving-school/{current_user['role']}/{document_type}"
+        
+        # Upload to Cloudinary
+        upload_result = await upload_to_cloudinary(file, folder)
+        
+        # Save document info to database
+        document_id = str(uuid.uuid4())
+        document_doc = {
+            "id": document_id,
+            "user_id": current_user["id"],
+            "document_type": document_type,
+            "file_url": upload_result["file_url"],
+            "file_name": file.filename,
+            "file_size": upload_result["file_size"],
+            "upload_date": datetime.utcnow(),
+            "is_verified": False,
+            "cloudinary_public_id": upload_result["public_id"]
+        }
+        
+        await db.documents.insert_one(document_doc)
+        
+        return {
+            "document_id": document_id,
+            "file_url": upload_result["file_url"],
+            "message": "Document uploaded successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload document: {str(e)}")
+
+@app.get("/api/documents/my")
+async def get_my_documents(current_user: dict = Depends(get_current_user)):
+    """Get all documents for the current user"""
+    documents_cursor = db.documents.find({"user_id": current_user["id"]})
+    documents = await documents_cursor.to_list(length=None)
+    return serialize_doc(documents)
+
+@app.get("/api/documents/{user_id}")
+async def get_user_documents(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Get documents for a specific user (manager/teacher access)"""
+    if current_user["role"] not in ["manager", "teacher"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view user documents")
+    
+    # For teachers, they can only view their students' documents
+    if current_user["role"] == "teacher":
+        # Check if user is student of this teacher
+        teacher = await db.teachers.find_one({"user_id": current_user["id"]})
+        if not teacher:
+            raise HTTPException(status_code=404, detail="Teacher profile not found")
+        
+        # Check if student is enrolled in teacher's school
+        enrollments_cursor = db.enrollments.find({"student_id": user_id})
+        enrollments = await enrollments_cursor.to_list(length=None)
+        
+        has_access = False
+        for enrollment in enrollments:
+            school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+            if school and school["id"] == teacher["driving_school_id"]:
+                has_access = True
+                break
+        
+        if not has_access:
+            raise HTTPException(status_code=403, detail="Not authorized to view this student's documents")
+    
+    documents_cursor = db.documents.find({"user_id": user_id})
+    documents = await documents_cursor.to_list(length=None)
+    return serialize_doc(documents)
+
+@app.post("/api/documents/{document_id}/verify")
+async def verify_document(document_id: str, current_user: dict = Depends(get_current_user)):
+    """Verify a document (manager only)"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can verify documents")
+    
+    document = await db.documents.find_one({"id": document_id})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Update document verification status
+    await db.documents.update_one(
+        {"id": document_id},
+        {"$set": {"is_verified": True, "verified_by": current_user["id"], "verified_at": datetime.utcnow()}}
+    )
+    
+    return {"message": "Document verified successfully"}
 
 # Teacher Management APIs
 @app.post("/api/teachers")
