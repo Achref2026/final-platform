@@ -1130,6 +1130,39 @@ function App() {
         </div>
       </div>
 
+      {/* Documents Section */}
+      <div className="dashboard-section">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="section-title">📄 My Documents</h3>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => openDocumentUpload('profile_photo')}
+              className="btn-primary-modern text-sm"
+            >
+              📸 Upload Photo
+            </button>
+            <button
+              onClick={() => openDocumentUpload('id_card')}
+              className="btn-primary-modern text-sm"
+            >
+              🆔 Upload ID
+            </button>
+            <button
+              onClick={() => openDocumentUpload('medical_certificate')}
+              className="btn-primary-modern text-sm"
+            >
+              🏥 Medical Cert
+            </button>
+            <button
+              onClick={openDocumentList}
+              className="btn-secondary-modern text-sm"
+            >
+              👁️ View All
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Enrollments */}
       <div className="dashboard-section">
         <h3 className="section-title">My Enrollments</h3>
@@ -1171,23 +1204,36 @@ function App() {
                 
                 {/* Course Progress */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {['theory', 'park', 'road'].map((courseType) => (
-                    <div key={courseType} className="progress-card">
-                      <h5 className="font-medium text-gray-900 capitalize mb-2">{courseType} Course</h5>
-                      <div className="progress-bar mb-2">
-                        <div 
-                          className="progress-fill" 
-                          style={{
-                            width: `${enrollment.progress[courseType].total > 0 ? 
-                              (enrollment.progress[courseType].completed / enrollment.progress[courseType].total) * 100 : 0}%`
-                          }}
-                        ></div>
+                  {['theory', 'park', 'road'].map((courseType) => {
+                    const course = enrollment.courses.find(c => c.course_type === courseType);
+                    return (
+                      <div key={courseType} className="progress-card">
+                        <div className="flex justify-between items-center mb-2">
+                          <h5 className="font-medium text-gray-900 capitalize">{courseType} Course</h5>
+                          {courseType === 'theory' && course && course.teacher_id && (
+                            <button
+                              onClick={() => createVideoRoom(course.id)}
+                              className="btn-primary-modern text-xs"
+                            >
+                              📹 Join Class
+                            </button>
+                          )}
+                        </div>
+                        <div className="progress-bar mb-2">
+                          <div 
+                            className="progress-fill" 
+                            style={{
+                              width: `${enrollment.progress[courseType].total > 0 ? 
+                                (enrollment.progress[courseType].completed / enrollment.progress[courseType].total) * 100 : 0}%`
+                            }}
+                          ></div>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {enrollment.progress[courseType].completed} / {enrollment.progress[courseType].total} sessions
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600">
-                        {enrollment.progress[courseType].completed} / {enrollment.progress[courseType].total} sessions
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
