@@ -1007,6 +1007,420 @@ async def verify_document(document_id: str, current_user: dict = Depends(get_cur
     
     return {"message": "Document verified successfully"}
 
+# Quiz Management APIs
+@app.post("/api/quizzes")
+async def create_quiz(
+    course_id: str = Form(...),
+    title: str = Form(...),
+    questions: str = Form(...),  # JSON string
+    time_limit_minutes: int = Form(30),
+    passing_score: float = Form(80.0),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a quiz for a theory course"""
+    if current_user["role"] not in ["teacher", "manager"]:
+        raise HTTPException(status_code=403, detail="Only teachers and managers can create quizzes")
+    
+    # Verify course exists and is a theory course
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    if course["course_type"] != CourseType.THEORY:
+        raise HTTPException(status_code=400, detail="Quizzes can only be created for theory courses")
+    
+    # Parse questions JSON
+    try:
+        questions_data = json.loads(questions)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid questions format")
+    
+    quiz_id = str(uuid.uuid4())
+    quiz_doc = {
+        "id": quiz_id,
+        "course_id": course_id,
+        "title": title,
+        "questions": questions_data,
+        "time_limit_minutes": time_limit_minutes,
+        "passing_score": passing_score,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.quizzes.insert_one(quiz_doc)
+    return {"id": quiz_id, "message": "Quiz created successfully"}
+
+@app.get("/api/quizzes/course/{course_id}")
+async def get_course_quizzes(course_id: str, current_user: dict = Depends(get_current_user)):
+    """Get all quizzes for a course"""
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Check access rights
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    has_access = False
+    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "teacher" and course.get("teacher_id") == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "manager":
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        if school and school["manager_id"] == current_user["id"]:
+            has_access = True
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Not authorized to view course quizzes")
+    
+    quizzes_cursor = db.quizzes.find({"course_id": course_id})
+    quizzes = await quizzes_cursor.to_list(length=None)
+    return serialize_doc(quizzes)
+
+@app.post("/api/quiz-attempts")
+async def submit_quiz_attempt(
+    quiz_id: str = Form(...),
+    answers: str = Form(...),  # JSON string
+    current_user: dict = Depends(get_current_user)
+):
+    """Submit a quiz attempt"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can submit quiz attempts")
+    
+    quiz = await db.quizzes.find_one({"id": quiz_id})
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    
+    # Parse answers
+    try:
+        answers_data = json.loads(answers)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid answers format")
+    
+    # Calculate score
+    total_questions = len(quiz["questions"])
+    correct_answers = 0
+    
+    for i, question in enumerate(quiz["questions"]):
+        student_answer = answers_data.get(str(i))
+        if student_answer == question.get("correct_answer"):
+            correct_answers += 1
+    
+    score = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
+    passed = score >= quiz["passing_score"]
+    
+    attempt_id = str(uuid.uuid4())
+    attempt_doc = {
+        "id": attempt_id,
+        "quiz_id": quiz_id,
+        "student_id": current_user["id"],
+        "answers": answers_data,
+        "score": score,
+        "passed": passed,
+        "completed_at": datetime.utcnow()
+    }
+    
+    await db.quiz_attempts.insert_one(attempt_doc)
+    
+    # Update course progress if passed
+    if passed:
+        course = await db.courses.find_one({"id": quiz["course_id"]})
+        if course:
+            await db.courses.update_one(
+                {"id": quiz["course_id"]},
+                {"$inc": {"completed_sessions": 1}, "$set": {"updated_at": datetime.utcnow()}}
+            )
+    
+    return {
+        "attempt_id": attempt_id,
+        "score": score,
+        "passed": passed,
+        "correct_answers": correct_answers,
+        "total_questions": total_questions
+    }
+
+@app.get("/api/quiz-attempts/my/{quiz_id}")
+async def get_my_quiz_attempts(quiz_id: str, current_user: dict = Depends(get_current_user)):
+    """Get student's attempts for a specific quiz"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can view their quiz attempts")
+    
+    attempts_cursor = db.quiz_attempts.find({"quiz_id": quiz_id, "student_id": current_user["id"]})
+    attempts = await attempts_cursor.to_list(length=None)
+    return serialize_doc(attempts)
+
+# Exam Management APIs
+@app.post("/api/exams/schedule")
+async def schedule_exam(
+    course_id: str = Form(...),
+    exam_date: str = Form(...),
+    exam_location: str = Form(...),
+    examiner_notes: str = Form(""),
+    current_user: dict = Depends(get_current_user)
+):
+    """Schedule an exam for a course"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can schedule exams")
+    
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Verify manager has access to this course
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+    if not school or school["manager_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to schedule exam for this course")
+    
+    try:
+        exam_datetime = datetime.fromisoformat(exam_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid exam date format")
+    
+    exam_id = str(uuid.uuid4())
+    exam_doc = {
+        "id": exam_id,
+        "course_id": course_id,
+        "exam_date": exam_datetime,
+        "exam_location": exam_location,
+        "examiner_notes": examiner_notes,
+        "status": "scheduled",
+        "score": None,
+        "passed": None,
+        "examiner_feedback": "",
+        "scheduled_by": current_user["id"],
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.exams.insert_one(exam_doc)
+    return {"id": exam_id, "message": "Exam scheduled successfully"}
+
+@app.post("/api/exams/{exam_id}/complete")
+async def complete_exam(
+    exam_id: str,
+    score: float = Form(...),
+    passed: bool = Form(...),
+    examiner_feedback: str = Form(""),
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark an exam as completed with results"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can complete exams")
+    
+    exam = await db.exams.find_one({"id": exam_id})
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    
+    # Update exam
+    await db.exams.update_one(
+        {"id": exam_id},
+        {
+            "$set": {
+                "status": "completed",
+                "score": score,
+                "passed": passed,
+                "examiner_feedback": examiner_feedback,
+                "completed_at": datetime.utcnow(),
+                "completed_by": current_user["id"]
+            }
+        }
+    )
+    
+    # Update course exam status
+    await db.courses.update_one(
+        {"id": exam["course_id"]},
+        {
+            "$set": {
+                "exam_status": ExamStatus.PASSED if passed else ExamStatus.FAILED,
+                "exam_score": score,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    return {"message": "Exam completed successfully"}
+
+@app.get("/api/exams/course/{course_id}")
+async def get_course_exams(course_id: str, current_user: dict = Depends(get_current_user)):
+    """Get all exams for a course"""
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Check access
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    has_access = False
+    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
+        has_access = True
+    elif current_user["role"] in ["manager", "teacher"]:
+        has_access = True
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Not authorized to view course exams")
+    
+    exams_cursor = db.exams.find({"course_id": course_id})
+    exams = await exams_cursor.to_list(length=None)
+    return serialize_doc(exams)
+
+# Teacher Assignment APIs
+@app.post("/api/courses/{course_id}/assign-teacher")
+async def assign_teacher_to_course(
+    course_id: str,
+    teacher_id: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Assign a teacher to a course"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can assign teachers")
+    
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    teacher = await db.teachers.find_one({"id": teacher_id})
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    
+    # Verify teacher belongs to manager's school
+    school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
+    if not school or teacher["driving_school_id"] != school["id"]:
+        raise HTTPException(status_code=403, detail="Teacher does not belong to your school")
+    
+    # Check gender compatibility for non-theory courses
+    if course["course_type"] != CourseType.THEORY:
+        enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+        student = await db.users.find_one({"id": enrollment["student_id"]})
+        
+        if student["gender"] == "female" and not teacher["can_teach_female"]:
+            raise HTTPException(status_code=400, detail="This teacher cannot teach female students")
+    
+    # Update course
+    await db.courses.update_one(
+        {"id": course_id},
+        {
+            "$set": {
+                "teacher_id": teacher_id,
+                "status": CourseStatus.IN_PROGRESS,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    return {"message": "Teacher assigned successfully"}
+
+@app.post("/api/courses/{course_id}/auto-assign-teacher")
+async def auto_assign_teacher(course_id: str, current_user: dict = Depends(get_current_user)):
+    """Automatically assign a suitable teacher to a course"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can assign teachers")
+    
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    student = await db.users.find_one({"id": enrollment["student_id"]})
+    school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+    
+    # Find suitable teachers
+    query = {"driving_school_id": school["id"]}
+    if student["gender"] == "female":
+        query["can_teach_female"] = True
+    
+    teachers_cursor = db.teachers.find(query)
+    teachers = await teachers_cursor.to_list(length=None)
+    
+    if not teachers:
+        raise HTTPException(status_code=404, detail="No suitable teachers found")
+    
+    # Select teacher with highest rating
+    best_teacher = max(teachers, key=lambda t: t["rating"])
+    
+    # Update course
+    await db.courses.update_one(
+        {"id": course_id},
+        {
+            "$set": {
+                "teacher_id": best_teacher["id"],
+                "status": CourseStatus.IN_PROGRESS,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    return {
+        "message": "Teacher assigned automatically",
+        "teacher_id": best_teacher["id"]
+    }
+
+# Session Scheduling APIs
+@app.post("/api/sessions/schedule")
+async def schedule_session(session_data: CourseSessionCreate, current_user: dict = Depends(get_current_user)):
+    """Schedule a course session"""
+    if current_user["role"] not in ["teacher", "manager"]:
+        raise HTTPException(status_code=403, detail="Only teachers and managers can schedule sessions")
+    
+    course = await db.courses.find_one({"id": session_data.course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Verify access
+    if current_user["role"] == "teacher" and course.get("teacher_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to schedule sessions for this course")
+    
+    session_id = str(uuid.uuid4())
+    session_doc = {
+        "id": session_id,
+        "course_id": session_data.course_id,
+        "teacher_id": course.get("teacher_id") or current_user["id"],
+        "student_id": None,  # Will be populated from enrollment
+        "scheduled_time": session_data.scheduled_time,
+        "duration_minutes": session_data.duration_minutes,
+        "status": "scheduled",
+        "notes": None,
+        "daily_room_url": None,
+        "daily_room_name": None,
+        "recording_url": None,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.course_sessions.insert_one(session_doc)
+    return {"id": session_id, "message": "Session scheduled successfully"}
+
+@app.get("/api/sessions/my")
+async def get_my_sessions(current_user: dict = Depends(get_current_user)):
+    """Get sessions for current user"""
+    query = {}
+    if current_user["role"] == "teacher":
+        query["teacher_id"] = current_user["id"]
+    elif current_user["role"] == "student":
+        # Get student's enrollments first
+        enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
+        enrollments = await enrollments_cursor.to_list(length=None)
+        course_ids = []
+        for enrollment in enrollments:
+            courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
+            courses = await courses_cursor.to_list(length=None)
+            course_ids.extend([course["id"] for course in courses])
+        query["course_id"] = {"$in": course_ids}
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    sessions_cursor = db.course_sessions.find(query)
+    sessions = await sessions_cursor.to_list(length=None)
+    
+    # Enrich with course and enrollment data
+    for session in sessions:
+        course = await db.courses.find_one({"id": session["course_id"]})
+        if course:
+            session["course"] = serialize_doc(course)
+            enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+            if enrollment:
+                session["enrollment"] = serialize_doc(enrollment)
+    
+    return serialize_doc(sessions)
+
 # Teacher Management APIs
 @app.post("/api/teachers")
 async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(get_current_user)):
