@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 from pathlib import Path
@@ -18,6 +19,12 @@ import cloudinary.uploader
 import cloudinary.api
 import aiofiles
 import json
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Constants
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Initialize FastAPI app
 app = FastAPI(title="Driving School Platform API")
