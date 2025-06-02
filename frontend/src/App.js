@@ -16,6 +16,7 @@ function App() {
   const [authMode, setAuthMode] = useState('login');
   const [authLoading, setAuthLoading] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [schoolForm, setSchoolForm] = useState({
     name: '',
     address: '',
