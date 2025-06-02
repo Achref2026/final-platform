@@ -6,6 +6,8 @@ from datetime import datetime
 import uuid
 import time
 import random
+import os
+from io import BytesIO
 
 class AlgerianDrivingSchoolTester:
     def __init__(self, base_url="https://ed2d93f8-079a-4279-8ee8-9bef37c77363.preview.emergentagent.com"):
@@ -17,6 +19,9 @@ class AlgerianDrivingSchoolTester:
         self.test_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         self.created_school_id = None
         self.enrollment_id = None
+        self.course_id = None
+        self.session_id = None
+        self.document_id = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, headers=None):
         """Run a single API test"""
