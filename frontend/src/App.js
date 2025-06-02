@@ -41,6 +41,15 @@ function App() {
     role: 'student'
   });
 
+  // Video call state
+  const [videoCallRoom, setVideoCallRoom] = useState(null);
+  const [showVideoCall, setShowVideoCall] = useState(false);
+
+  // Document management state
+  const [showDocumentUpload, setShowDocumentUpload] = useState(false);
+  const [uploadDocumentType, setUploadDocumentType] = useState('');
+  const [showDocumentList, setShowDocumentList] = useState(false);
+
   // Load user data from localStorage on component mount
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
