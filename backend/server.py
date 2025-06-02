@@ -32,8 +32,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 # Initialize FastAPI app
 app = FastAPI(title="Driving School Platform API")
 
-# Include API router
-app.include_router(api_router)
+# Initialize API Router with /api prefix
+api_router = APIRouter(prefix="/api")
 
 # Create demo uploads directory and mount static files
 demo_uploads_dir = Path("demo-uploads")
@@ -70,6 +70,9 @@ cloudinary.config(
     api_key=os.environ.get('CLOUDINARY_API_KEY'),
     api_secret=os.environ.get('CLOUDINARY_API_SECRET')
 )
+
+# Include API router
+app.include_router(api_router)
 
 # Enums
 class UserRole(str, Enum):
