@@ -578,6 +578,110 @@ def test_student_workflow(tester):
     print("✅ Student workflow completed successfully")
     return True
 
+def test_teacher_workflow(tester):
+    """Test the complete teacher workflow"""
+    print("\n" + "="*50)
+    print("TESTING TEACHER WORKFLOW")
+    print("="*50)
+    
+    # 1. Login as teacher
+    if not tester.test_login("teacher@example.com", "testpass123"):
+        # If login fails, try to register a new teacher
+        success, teacher_data = test_new_email_registration(tester, "teacher")
+        if not success:
+            print("❌ Could not login or register as teacher")
+            return False
+    
+    # 2. Get teacher dashboard
+    tester.test_get_dashboard_data("teacher")
+    
+    # 3. Test video room creation if we have a course ID
+    if tester.course_id:
+        tester.test_create_video_room(tester.course_id)
+        tester.test_get_course_video_rooms(tester.course_id)
+        
+        # Test joining a session if one was created
+        if tester.session_id:
+            tester.test_join_video_session(tester.session_id)
+    
+    print("✅ Teacher workflow completed successfully")
+    return True
+
+def test_video_api(tester):
+    """Test the video calling APIs"""
+    print("\n" + "="*50)
+    print("TESTING VIDEO CALLING APIs")
+    print("="*50)
+    
+    # Need to be logged in as a teacher or manager to create rooms
+    if not tester.token or tester.user_data['role'] not in ['teacher', 'manager']:
+        if not tester.test_login("teacher@example.com", "testpass123"):
+            print("❌ Could not login as teacher for video API testing")
+            return False
+    
+    # Need a course ID to test with
+    if not tester.course_id:
+        # Get student courses to find a course ID
+        if tester.user_data['role'] == 'student':
+            success, courses = tester.test_get_student_courses()
+            if success and courses:
+                tester.course_id = courses[0]['id']
+        else:
+            # For teacher/manager, we need to find a course differently
+            # This is simplified for testing purposes
+            print("⚠️ No course ID available for video API testing")
+            return False
+    
+    # Test video room creation
+    success, room_data = tester.test_create_video_room(tester.course_id)
+    if not success:
+        print("❌ Failed to create video room")
+        return False
+    
+    # Test getting rooms for a course
+    tester.test_get_course_video_rooms(tester.course_id)
+    
+    # Test joining a session
+    if tester.session_id:
+        tester.test_join_video_session(tester.session_id)
+    
+    print("✅ Video API tests completed successfully")
+    return True
+
+def test_document_api(tester):
+    """Test the document upload APIs"""
+    print("\n" + "="*50)
+    print("TESTING DOCUMENT UPLOAD APIs")
+    print("="*50)
+    
+    # Need to be logged in to upload documents
+    if not tester.token:
+        if not tester.test_login("student@example.com", "testpass123"):
+            print("❌ Could not login for document API testing")
+            return False
+    
+    # Test document upload
+    success, doc_data = tester.test_upload_document("profile_photo")
+    if not success:
+        print("❌ Failed to upload document")
+        return False
+    
+    # Test getting my documents
+    tester.test_get_my_documents()
+    
+    # If manager, test document verification
+    if tester.user_data['role'] == 'manager' and tester.document_id:
+        tester.test_verify_document(tester.document_id)
+    
+    # If manager/teacher, test getting another user's documents
+    if tester.user_data['role'] in ['manager', 'teacher']:
+        # For testing, we'd need a student ID
+        # This is simplified for testing purposes
+        print("⚠️ Skipping test_get_user_documents as we need a specific user ID")
+    
+    print("✅ Document API tests completed successfully")
+    return True
+
 def main():
     tester = AlgerianDrivingSchoolTester()
     
@@ -597,6 +701,11 @@ def main():
     # Test role-specific workflows
     test_manager_workflow(tester)
     test_student_workflow(tester)
+    test_teacher_workflow(tester)
+    
+    # Test new APIs specifically
+    test_video_api(tester)
+    test_document_api(tester)
     
     # Print test results
     print("\n" + "="*50)
