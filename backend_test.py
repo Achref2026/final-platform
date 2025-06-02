@@ -519,6 +519,10 @@ def test_manager_workflow(tester):
     # 5. Get manager dashboard again (should now have school data)
     tester.test_get_dashboard_data("manager")
     
+    # 6. Test document verification if we have a document ID
+    if tester.document_id:
+        tester.test_verify_document(tester.document_id)
+    
     print("✅ Manager workflow completed successfully")
     return True
 
