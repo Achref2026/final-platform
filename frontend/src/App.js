@@ -410,7 +410,7 @@ function App() {
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
               Master the Road with
               <span className="block bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-                EcoleDZ
+                DrivingDZ
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-blue-100 mb-8 max-w-4xl mx-auto leading-relaxed">
