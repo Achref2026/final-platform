@@ -482,10 +482,10 @@ async def upload_to_cloudinary(file: UploadFile, folder: str, resource_type: str
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
-# API Routes
+# API Routes - Add the basic routes to API router
 
 @api_router.get("/health")
-async def health_check():
+async def api_health_check():
     return {"status": "healthy", "message": "Driving School Platform API is running"}
 
 @api_router.get("/states")
