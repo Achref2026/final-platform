@@ -1450,6 +1450,279 @@ async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(
     await db.teachers.insert_one(teacher_doc)
     return {"id": teacher_id, "message": "Teacher added successfully"}
 
+# Payment Integration APIs
+@app.post("/api/payments/initiate")
+async def initiate_payment(
+    enrollment_id: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Initiate payment for an enrollment"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can initiate payments")
+    
+    enrollment = await db.enrollments.find_one({"id": enrollment_id})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    if enrollment["student_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to pay for this enrollment")
+    
+    if enrollment["payment_status"] == PaymentStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="Payment already completed")
+    
+    # Generate transaction ID
+    transaction_id = f"DS_{enrollment_id}_{str(uuid.uuid4())[:8]}"
+    
+    # In a real implementation, you would integrate with Baridimob API here
+    # For demo purposes, we'll simulate the payment process
+    payment_doc = {
+        "id": str(uuid.uuid4()),
+        "enrollment_id": enrollment_id,
+        "transaction_id": transaction_id,
+        "amount": enrollment["amount"],
+        "status": "pending",
+        "payment_method": "baridimob",
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.payments.insert_one(payment_doc)
+    
+    # In real implementation, redirect to Baridimob payment page
+    payment_url = f"https://demo-payment.baridimob.dz/pay?transaction_id={transaction_id}&amount={enrollment['amount']}"
+    
+    return {
+        "transaction_id": transaction_id,
+        "payment_url": payment_url,
+        "amount": enrollment["amount"],
+        "message": "Payment initiated successfully"
+    }
+
+@app.post("/api/payments/complete")
+async def complete_payment(
+    transaction_id: str = Form(...),
+    status: str = Form(...),  # success, failed, cancelled
+    current_user: dict = Depends(get_current_user)
+):
+    """Complete payment process (webhook endpoint for payment gateway)"""
+    payment = await db.payments.find_one({"transaction_id": transaction_id})
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    # Update payment status
+    payment_status = PaymentStatus.COMPLETED if status == "success" else PaymentStatus.FAILED
+    
+    await db.payments.update_one(
+        {"transaction_id": transaction_id},
+        {
+            "$set": {
+                "status": status,
+                "completed_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    # Update enrollment
+    await db.enrollments.update_one(
+        {"id": payment["enrollment_id"]},
+        {"$set": {"payment_status": payment_status}}
+    )
+    
+    return {"message": f"Payment {status}", "status": payment_status}
+
+@app.get("/api/payments/my")
+async def get_my_payments(current_user: dict = Depends(get_current_user)):
+    """Get payments for current user"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can view payments")
+    
+    # Get student's enrollments
+    enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
+    enrollments = await enrollments_cursor.to_list(length=None)
+    enrollment_ids = [e["id"] for e in enrollments]
+    
+    payments_cursor = db.payments.find({"enrollment_id": {"$in": enrollment_ids}})
+    payments = await payments_cursor.to_list(length=None)
+    
+    return serialize_doc(payments)
+
+# Rating and Review APIs
+@app.post("/api/reviews/school")
+async def rate_driving_school(
+    school_id: str = Form(...),
+    rating: float = Form(...),
+    comment: str = Form(""),
+    current_user: dict = Depends(get_current_user)
+):
+    """Rate and review a driving school"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can rate schools")
+    
+    if not (1 <= rating <= 5):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    
+    # Check if student has completed enrollment at this school
+    enrollment = await db.enrollments.find_one({
+        "student_id": current_user["id"],
+        "driving_school_id": school_id,
+        "payment_status": PaymentStatus.COMPLETED
+    })
+    
+    if not enrollment:
+        raise HTTPException(status_code=403, detail="You must complete enrollment to rate this school")
+    
+    # Check if already reviewed
+    existing_review = await db.school_reviews.find_one({
+        "student_id": current_user["id"],
+        "school_id": school_id
+    })
+    
+    if existing_review:
+        raise HTTPException(status_code=400, detail="You have already reviewed this school")
+    
+    review_id = str(uuid.uuid4())
+    review_doc = {
+        "id": review_id,
+        "student_id": current_user["id"],
+        "school_id": school_id,
+        "rating": rating,
+        "comment": comment,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.school_reviews.insert_one(review_doc)
+    
+    # Update school rating
+    await update_school_rating(school_id)
+    
+    return {"id": review_id, "message": "Review submitted successfully"}
+
+@app.post("/api/reviews/teacher")
+async def rate_teacher(
+    teacher_id: str = Form(...),
+    rating: float = Form(...),
+    comment: str = Form(""),
+    current_user: dict = Depends(get_current_user)
+):
+    """Rate and review a teacher"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can rate teachers")
+    
+    if not (1 <= rating <= 5):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    
+    # Check if student has completed a course with this teacher
+    courses_cursor = db.courses.find({"teacher_id": teacher_id, "status": CourseStatus.COMPLETED})
+    courses = await courses_cursor.to_list(length=None)
+    
+    has_completed_course = False
+    for course in courses:
+        enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+        if enrollment and enrollment["student_id"] == current_user["id"]:
+            has_completed_course = True
+            break
+    
+    if not has_completed_course:
+        raise HTTPException(status_code=403, detail="You must complete a course with this teacher to rate them")
+    
+    # Check if already reviewed
+    existing_review = await db.teacher_reviews.find_one({
+        "student_id": current_user["id"],
+        "teacher_id": teacher_id
+    })
+    
+    if existing_review:
+        raise HTTPException(status_code=400, detail="You have already reviewed this teacher")
+    
+    review_id = str(uuid.uuid4())
+    review_doc = {
+        "id": review_id,
+        "student_id": current_user["id"],
+        "teacher_id": teacher_id,
+        "rating": rating,
+        "comment": comment,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.teacher_reviews.insert_one(review_doc)
+    
+    # Update teacher rating
+    await update_teacher_rating(teacher_id)
+    
+    return {"id": review_id, "message": "Review submitted successfully"}
+
+@app.get("/api/reviews/school/{school_id}")
+async def get_school_reviews(school_id: str, limit: int = 20, skip: int = 0):
+    """Get reviews for a driving school"""
+    reviews_cursor = db.school_reviews.find({"school_id": school_id}).skip(skip).limit(limit)
+    reviews = await reviews_cursor.to_list(length=limit)
+    
+    # Enrich with student data
+    for review in reviews:
+        student = await db.users.find_one({"id": review["student_id"]})
+        if student:
+            review["student"] = {
+                "first_name": student["first_name"],
+                "last_name": student["last_name"]
+            }
+    
+    return serialize_doc(reviews)
+
+@app.get("/api/reviews/teacher/{teacher_id}")
+async def get_teacher_reviews(teacher_id: str, limit: int = 20, skip: int = 0):
+    """Get reviews for a teacher"""
+    reviews_cursor = db.teacher_reviews.find({"teacher_id": teacher_id}).skip(skip).limit(limit)
+    reviews = await reviews_cursor.to_list(length=limit)
+    
+    # Enrich with student data
+    for review in reviews:
+        student = await db.users.find_one({"id": review["student_id"]})
+        if student:
+            review["student"] = {
+                "first_name": student["first_name"],
+                "last_name": student["last_name"]
+            }
+    
+    return serialize_doc(reviews)
+
+# Helper functions for rating updates
+async def update_school_rating(school_id: str):
+    """Update school's average rating"""
+    reviews_cursor = db.school_reviews.find({"school_id": school_id})
+    reviews = await reviews_cursor.to_list(length=None)
+    
+    if reviews:
+        total_rating = sum(review["rating"] for review in reviews)
+        average_rating = total_rating / len(reviews)
+        
+        await db.driving_schools.update_one(
+            {"id": school_id},
+            {
+                "$set": {
+                    "rating": round(average_rating, 1),
+                    "total_reviews": len(reviews)
+                }
+            }
+        )
+
+async def update_teacher_rating(teacher_id: str):
+    """Update teacher's average rating"""
+    reviews_cursor = db.teacher_reviews.find({"teacher_id": teacher_id})
+    reviews = await reviews_cursor.to_list(length=None)
+    
+    if reviews:
+        total_rating = sum(review["rating"] for review in reviews)
+        average_rating = total_rating / len(reviews)
+        
+        await db.teachers.update_one(
+            {"id": teacher_id},
+            {
+                "$set": {
+                    "rating": round(average_rating, 1),
+                    "total_reviews": len(reviews)
+                }
+            }
+        )
+
 @app.get("/api/teachers/my-school")
 async def get_my_school_teachers(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "manager":
