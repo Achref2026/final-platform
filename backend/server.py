@@ -1743,6 +1743,14 @@ async def get_my_school_teachers(current_user: dict = Depends(get_current_user))
             teacher["user"] = serialize_doc(user)
     
     return serialize_doc(teachers)
+    
+    # Enrich with user data
+    for teacher in teachers:
+        user = await db.users.find_one({"id": teacher["user_id"]})
+        if user:
+            teacher["user"] = serialize_doc(user)
+    
+    return serialize_doc(teachers)
 
 # Course Management APIs
 @app.get("/api/courses/my")
