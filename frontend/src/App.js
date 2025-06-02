@@ -273,11 +273,17 @@ function App() {
   const handleSchoolSubmit = async (e) => {
     e.preventDefault();
     
-    if (!user || user.role !== 'manager') {
-      alert('Only managers can create driving schools');
+    if (!user) {
+      alert('Please login to register a driving school');
+      setShowAuthModal(true);
       return;
     }
-    
+
+    if (user.role !== 'manager') {
+      alert('Only managers can register driving schools');
+      return;
+    }
+
     try {
       const token = localStorage.getItem('auth_token');
       const response = await fetch(`${BACKEND_URL}/api/driving-schools`, {
@@ -286,16 +292,11 @@ function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...schoolForm,
-          price: parseFloat(schoolForm.price)
-        })
+        body: JSON.stringify(schoolForm)
       });
 
-      const data = await response.json();
-      
       if (response.ok) {
-        alert('Driving school created successfully!');
+        alert('Driving school registered successfully!');
         setSchoolForm({
           name: '',
           address: '',
@@ -307,12 +308,120 @@ function App() {
         });
         setCurrentPage('dashboard');
       } else {
-        alert(data.detail || 'Failed to create driving school');
+        const errorData = await response.json();
+        alert('Registration failed: ' + (errorData.detail || 'Unknown error'));
       }
     } catch (error) {
-      console.error('School creation error:', error);
-      alert('Failed to create driving school - Network error');
+      console.error('Error registering school:', error);
+      alert('Registration failed. Please try again.');
     }
+  };
+
+  // Video Call Functions
+  const createVideoRoom = async (courseId) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const roomName = `course-${courseId}-${Date.now()}`;
+      
+      const response = await fetch(`${BACKEND_URL}/api/video/create-room`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          room_name: roomName,
+          course_id: courseId,
+          properties: {
+            enable_screenshare: true,
+            enable_chat: true,
+            start_video_off: false,
+            start_audio_off: false,
+            max_participants: 10
+          }
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setVideoCallRoom({
+          url: data.room_url,
+          name: data.room_name,
+          sessionId: data.session_id
+        });
+        setShowVideoCall(true);
+      } else {
+        const errorData = await response.json();
+        alert('Failed to create video room: ' + (errorData.detail || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error creating video room:', error);
+      alert('Failed to create video room. Please try again.');
+    }
+  };
+
+  const joinVideoSession = async (sessionId) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      
+      const response = await fetch(`${BACKEND_URL}/api/video/join/${sessionId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setVideoCallRoom({
+          url: data.room_url,
+          name: data.room_name,
+          sessionId: data.session_id
+        });
+        setShowVideoCall(true);
+      } else {
+        const errorData = await response.json();
+        alert('Failed to join video session: ' + (errorData.detail || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error joining video session:', error);
+      alert('Failed to join video session. Please try again.');
+    }
+  };
+
+  const leaveVideoCall = () => {
+    setShowVideoCall(false);
+    setVideoCallRoom(null);
+  };
+
+  // Document Management Functions
+  const openDocumentUpload = (documentType) => {
+    setUploadDocumentType(documentType);
+    setShowDocumentUpload(true);
+  };
+
+  const handleDocumentUploadSuccess = (uploadData) => {
+    setShowDocumentUpload(false);
+    setUploadDocumentType('');
+    alert('Document uploaded successfully!');
+    
+    // Refresh dashboard if on dashboard page
+    if (currentPage === 'dashboard') {
+      fetchDashboardData();
+    }
+  };
+
+  const cancelDocumentUpload = () => {
+    setShowDocumentUpload(false);
+    setUploadDocumentType('');
+  };
+
+  const openDocumentList = () => {
+    setShowDocumentList(true);
+  };
+
+  const closeDocumentList = () => {
+    setShowDocumentList(false);
   };
 
   const renderNavigation = () => (
