@@ -71,8 +71,7 @@ cloudinary.config(
     api_secret=os.environ.get('CLOUDINARY_API_SECRET')
 )
 
-# Include API router
-app.include_router(api_router)
+# API router will be included at the end of the file after all endpoints are defined
 
 # Basic routes that don't need /api prefix
 @app.get("/health")
