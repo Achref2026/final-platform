@@ -309,7 +309,7 @@ function App() {
           <div className="flex items-center">
             <div className="text-3xl animate-pulse">🚗</div>
             <h1 className="ml-3 text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              EcoleDZ
+              DrivingDZ
             </h1>
           </div>
           <nav className="hidden md:flex items-center space-x-8">
