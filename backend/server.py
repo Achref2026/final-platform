@@ -479,15 +479,15 @@ async def upload_to_cloudinary(file: UploadFile, folder: str, resource_type: str
 
 # API Routes
 
-@app.get("/api/health")
+@api_router.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "Driving School Platform API is running"}
 
-@app.get("/api/states")
+@api_router.get("/states")
 async def get_states():
     return {"states": ALGERIAN_STATES}
 
-@app.post("/api/auth/register", response_model=dict)
+@api_router.post("/auth/register", response_model=dict)
 async def register_user(
     # User data
     email: str = Form(...),
