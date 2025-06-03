@@ -819,21 +819,40 @@ async def create_sample_data():
 
 @app.post("/api/enrollments")
 async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.STUDENT:
-        raise HTTPException(status_code=403, detail="Only students can enroll")
+    # Allow guests and students to enroll
+    if current_user["role"] not in ["guest", "student"]:
+        raise HTTPException(status_code=403, detail="Only guests and students can enroll")
     
     # Check if school exists
     school = await db.driving_schools.find_one({"id": enrollment_data.school_id})
     if not school:
         raise HTTPException(status_code=404, detail="Driving school not found")
     
-    # Check if student already enrolled
+    # Check if user already enrolled
     existing_enrollment = await db.enrollments.find_one({
         "student_id": current_user["id"],
         "driving_school_id": enrollment_data.school_id
     })
     if existing_enrollment:
         raise HTTPException(status_code=400, detail="Already enrolled in this school")
+    
+    # If user is guest, upgrade them to student role
+    if current_user["role"] == "guest":
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$set": {"role": "student"}}
+        )
+        
+        # Create student profile
+        student_profile = {
+            "id": str(uuid.uuid4()),
+            "user_id": current_user["id"],
+            "documents": {},
+            "medical_info": {},
+            "enrollment_status": "enrolled",
+            "created_at": datetime.utcnow()
+        }
+        await db.student_profiles.insert_one(student_profile)
     
     enrollment_id = str(uuid.uuid4())
     enrollment_doc = {
@@ -854,7 +873,7 @@ async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dic
     return {
         "enrollment_id": enrollment_id,
         "amount": school["price"],
-        "message": "Enrollment created. Please proceed with payment."
+        "message": "Enrollment created. You are now a student! Please proceed with payment."
     }
 
 @app.get("/api/enrollments/my")
