@@ -503,7 +503,6 @@ async def register_user(
     address: str = Form(...),
     date_of_birth: str = Form(...),
     gender: str = Form(...),
-    role: str = Form(...),
     state: str = Form(...),
     # Optional profile photo
     profile_photo: Optional[UploadFile] = File(None)
@@ -524,10 +523,6 @@ async def register_user(
         if state not in ALGERIAN_STATES:
             raise HTTPException(status_code=400, detail="Invalid state")
         
-        # Validate role
-        if role not in ['student', 'teacher', 'manager']:
-            raise HTTPException(status_code=400, detail="Invalid role")
-        
         # Validate gender
         if gender not in ['male', 'female']:
             raise HTTPException(status_code=400, detail="Invalid gender")
@@ -545,7 +540,7 @@ async def register_user(
                 logger.warning(f"Failed to upload profile photo: {str(e)}")
                 # Continue without photo - don't fail registration
         
-        # Create user
+        # Create user with default "guest" role
         user_data = {
             "id": str(uuid.uuid4()),
             "email": email,
@@ -556,7 +551,7 @@ async def register_user(
             "address": address,
             "date_of_birth": birth_date,
             "gender": gender,
-            "role": role,
+            "role": "guest",  # Default role for new users
             "state": state,
             "profile_photo_url": profile_photo_url,
             "created_at": datetime.utcnow(),
@@ -565,17 +560,8 @@ async def register_user(
         
         await db.users.insert_one(user_data)
         
-        # Create role-specific profiles
-        if role == "student":
-            student_profile = {
-                "id": str(uuid.uuid4()),
-                "user_id": user_data["id"],
-                "documents": {},
-                "medical_info": {},
-                "enrollment_status": "not_enrolled",
-                "created_at": datetime.utcnow()
-            }
-            await db.student_profiles.insert_one(student_profile)
+        # No role-specific profiles created during registration
+        # Profiles will be created when roles are assigned
         
         # Generate access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
