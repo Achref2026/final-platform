@@ -129,7 +129,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
-    role: UserRole
+    # Role will be assigned automatically - removed from user input
 
 class UserLogin(BaseModel):
     email: EmailStr
