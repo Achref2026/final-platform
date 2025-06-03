@@ -429,6 +429,39 @@ function App() {
     setShowDocumentList(true);
   };
 
+  // Enhanced Document Upload Flow - Role-based requirements
+  const getRequiredDocuments = (userRole) => {
+    const requirements = {
+      student: [
+        { type: 'profile_photo', label: 'Profile Photo', icon: '📸', required: true },
+        { type: 'id_card', label: 'ID Card', icon: '🆔', required: true },
+        { type: 'medical_certificate', label: 'Medical Certificate', icon: '🏥', required: true }
+      ],
+      teacher: [
+        { type: 'profile_photo', label: 'Profile Photo', icon: '📸', required: true },
+        { type: 'id_card', label: 'ID Card', icon: '🆔', required: true },
+        { type: 'driving_license', label: 'Driving License', icon: '🚗', required: true },
+        { type: 'teaching_license', label: 'Teaching License', icon: '👨‍🏫', required: true }
+      ],
+      manager: [
+        { type: 'profile_photo', label: 'Profile Photo', icon: '📸', required: true },
+        { type: 'id_card', label: 'ID Card', icon: '🆔', required: true }
+      ]
+    };
+    return requirements[userRole] || [];
+  };
+
+  const checkDocumentCompleteness = (userRole, uploadedDocs) => {
+    const required = getRequiredDocuments(userRole);
+    const uploadedTypes = uploadedDocs.map(doc => doc.document_type);
+    const missing = required.filter(req => req.required && !uploadedTypes.includes(req.type));
+    return {
+      isComplete: missing.length === 0,
+      missing: missing,
+      completion: Math.round((uploadedTypes.length / required.length) * 100)
+    };
+  };
+
   const closeDocumentList = () => {
     setShowDocumentList(false);
   };
