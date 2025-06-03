@@ -442,3 +442,33 @@ body {
 .pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
 }
+
+/* Video Session Cards */
+.video-session-card {
+  @apply bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-all duration-200;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+}
+
+.video-session-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Video Call Container Enhancements */
+.video-call-container {
+  @apply bg-white rounded-xl shadow-lg border border-gray-200;
+}
+
+.video-frame {
+  @apply rounded-lg overflow-hidden shadow-inner;
+  border: 2px solid #e2e8f0;
+}
+
+.video-controls {
+  @apply bg-gray-50 rounded-lg p-4 border border-gray-200;
+}
+
+.loading-overlay {
+  @apply absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center rounded-lg;
+}
