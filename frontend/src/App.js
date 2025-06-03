@@ -1588,8 +1588,8 @@ function App() {
               <div className="space-y-6">
                 {dashboardData.courses.map((course, index) => (
                   <div key={index} className="course-card">
-                    <div className="flex justify-between items-start">
-                      <div>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
                         <h4 className="text-xl font-bold text-gray-900 capitalize">{course.course_type} Course</h4>
                         <p className="text-gray-600">Student: {course.student.first_name} {course.student.last_name}</p>
                         <p className="text-gray-600">School: {course.school.name}</p>
@@ -1605,13 +1605,27 @@ function App() {
                           ></div>
                         </div>
                       </div>
-                      <span className={`status-badge ${
-                        course.status === 'completed' ? 'status-completed' :
-                        course.status === 'in_progress' ? 'status-pending' :
-                        'status-failed'
-                      }`}>
-                        {course.status.replace('_', ' ')}
-                      </span>
+                      
+                      <div className="flex flex-col items-end space-y-2">
+                        <span className={`status-badge ${
+                          course.status === 'completed' ? 'status-completed' :
+                          course.status === 'in_progress' ? 'status-pending' :
+                          'status-failed'
+                        }`}>
+                          {course.status.replace('_', ' ')}
+                        </span>
+                        
+                        {course.course_type === 'theory' && course.status === 'in_progress' && (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => createVideoRoom(course.id)}
+                              className="btn-primary-modern text-sm"
+                            >
+                              📹 Start Class
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
