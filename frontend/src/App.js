@@ -1312,13 +1312,23 @@ function App() {
                       <div key={courseType} className="progress-card">
                         <div className="flex justify-between items-center mb-2">
                           <h5 className="font-medium text-gray-900 capitalize">{courseType} Course</h5>
-                          {courseType === 'theory' && course && course.teacher_id && (
-                            <button
-                              onClick={() => createVideoRoom(course.id)}
-                              className="btn-primary-modern text-xs"
-                            >
-                              📹 Join Class
-                            </button>
+                          {courseType === 'theory' && course && (
+                            <div className="flex space-x-2">
+                              {course.teacher_id && (
+                                <button
+                                  onClick={() => createVideoRoom(course.id)}
+                                  className="btn-primary-modern text-xs"
+                                >
+                                  📹 Join Class
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openQuiz(course.id)}
+                                className="btn-secondary-modern text-xs"
+                              >
+                                📝 Take Quiz
+                              </button>
+                            </div>
                           )}
                         </div>
                         <div className="progress-bar mb-2">
