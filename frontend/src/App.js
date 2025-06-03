@@ -1232,6 +1232,63 @@ function App() {
         </div>
       </div>
 
+      {/* Upcoming Video Sessions */}
+      <div className="dashboard-section">
+        <h3 className="section-title">📹 Upcoming Video Sessions</h3>
+        {dashboardData.enrollments.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {dashboardData.enrollments.map((enrollment, enrollmentIndex) => 
+              enrollment.courses
+                .filter(course => course.course_type === 'theory' && course.teacher_id)
+                .map((course, courseIndex) => (
+                  <div key={`${enrollmentIndex}-${courseIndex}`} className="video-session-card">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 className="font-bold text-gray-900">Theory Session</h4>
+                        <p className="text-sm text-gray-600">{enrollment.school.name}</p>
+                      </div>
+                      <div className="text-2xl">📹</div>
+                    </div>
+                    
+                    <div className="space-y-2 mb-4">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Progress:</span> {course.completed_sessions}/{course.total_sessions} sessions
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Status:</span> 
+                        <span className={`ml-1 ${course.status === 'in_progress' ? 'text-green-600' : 'text-gray-500'}`}>
+                          {course.status.replace('_', ' ')}
+                        </span>
+                      </p>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => createVideoRoom(course.id)}
+                        className="btn-primary-modern text-sm flex-1"
+                      >
+                        🚀 Start Session
+                      </button>
+                      <button
+                        onClick={() => openQuiz(course.id)}
+                        className="btn-secondary-modern text-sm flex-1"
+                      >
+                        📝 Take Quiz
+                      </button>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <div className="text-6xl mb-4">📹</div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">No video sessions yet</h3>
+            <p className="text-gray-600">Enroll in a driving school to start your theory sessions!</p>
+          </div>
+        )}
+      </div>
+
       {/* Documents Section */}
       <div className="dashboard-section">
         <div className="flex justify-between items-center mb-4">
