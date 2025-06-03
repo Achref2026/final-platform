@@ -1322,37 +1322,86 @@ function App() {
         )}
       </div>
 
-      {/* Documents Section */}
+      {/* Documents Section - Enhanced */}
       <div className="dashboard-section">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="section-title">📄 My Documents</h3>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => openDocumentUpload('profile_photo')}
-              className="btn-primary-modern text-sm"
-            >
-              📸 Upload Photo
-            </button>
-            <button
-              onClick={() => openDocumentUpload('id_card')}
-              className="btn-primary-modern text-sm"
-            >
-              🆔 Upload ID
-            </button>
-            <button
-              onClick={() => openDocumentUpload('medical_certificate')}
-              className="btn-primary-modern text-sm"
-            >
-              🏥 Medical Cert
-            </button>
-            <button
-              onClick={openDocumentList}
-              className="btn-secondary-modern text-sm"
-            >
-              👁️ View All
-            </button>
-          </div>
+          <h3 className="section-title">📄 Required Documents</h3>
+          <button
+            onClick={openDocumentList}
+            className="btn-secondary-modern text-sm"
+          >
+            👁️ View All Documents
+          </button>
         </div>
+        
+        {user && (
+          <div className="space-y-4">
+            {/* Document Completion Status */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-blue-900">Document Verification Status</h4>
+                <span className="text-sm text-blue-600">
+                  {dashboardData.documents ? checkDocumentCompleteness(user.role, dashboardData.documents).completion : 0}% Complete
+                </span>
+              </div>
+              <div className="progress-bar mb-2">
+                <div 
+                  className="progress-fill bg-blue-500" 
+                  style={{
+                    width: `${dashboardData.documents ? checkDocumentCompleteness(user.role, dashboardData.documents).completion : 0}%`
+                  }}
+                ></div>
+              </div>
+              <p className="text-sm text-blue-700">
+                Complete your document verification to access all features
+              </p>
+            </div>
+
+            {/* Required Documents Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {getRequiredDocuments(user.role).map((docReq) => {
+                const isUploaded = dashboardData.documents && 
+                  dashboardData.documents.some(doc => doc.document_type === docReq.type);
+                const uploadedDoc = dashboardData.documents && 
+                  dashboardData.documents.find(doc => doc.document_type === docReq.type);
+                
+                return (
+                  <div key={docReq.type} className={`document-requirement-card ${isUploaded ? 'completed' : 'pending'}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="text-2xl">{docReq.icon}</div>
+                      <div className={`text-xl ${isUploaded ? 'text-green-500' : 'text-gray-400'}`}>
+                        {isUploaded ? '✅' : '⏳'}
+                      </div>
+                    </div>
+                    
+                    <h5 className="font-bold text-gray-900 mb-2">{docReq.label}</h5>
+                    
+                    {isUploaded ? (
+                      <div>
+                        <p className="text-sm text-green-600 mb-2">
+                          {uploadedDoc?.is_verified ? '✅ Verified' : '⏳ Pending Verification'}
+                        </p>
+                        <button
+                          onClick={() => window.open(uploadedDoc?.file_url, '_blank')}
+                          className="btn-secondary-modern text-xs w-full"
+                        >
+                          👁️ View Document
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => openDocumentUpload(docReq.type)}
+                        className="btn-primary-modern text-xs w-full"
+                      >
+                        📤 Upload {docReq.label}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Enrollments */}
