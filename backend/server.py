@@ -80,6 +80,7 @@ async def health_check():
 
 # Enums
 class UserRole(str, Enum):
+    GUEST = "guest"
     STUDENT = "student"
     TEACHER = "teacher"
     MANAGER = "manager"
