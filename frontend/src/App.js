@@ -1669,18 +1669,6 @@ function App() {
                     <option value="female">Female</option>
                   </select>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">👨‍💼 Role</label>
-                  <select
-                    value={authData.role}
-                    onChange={(e) => setAuthData({...authData, role: e.target.value})}
-                    className="select-modern"
-                  >
-                    <option value="student">Student</option>
-                    <option value="teacher">Teacher</option>
-                    <option value="manager">Manager</option>
-                  </select>
-                </div>
               </div>
             </>
           )}
