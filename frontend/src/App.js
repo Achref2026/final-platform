@@ -1758,6 +1758,119 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Contact Us Section */}
+      <footer className="bg-gradient-to-r from-gray-900 to-blue-900 text-white py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h2 className="text-4xl font-bold mb-8">
+              📞 Contact Us
+            </h2>
+            <p className="text-xl text-gray-300 mb-12">
+              Get in touch with us for any inquiries about our driving school platform
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              {/* Phone Contact */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 hover:bg-white/20 transition-all duration-200">
+                <div className="text-4xl mb-4">📱</div>
+                <h3 className="text-2xl font-bold mb-4">Phone Support</h3>
+                <p className="text-gray-300 mb-4">Call us for immediate assistance</p>
+                <a 
+                  href="tel:+213555123456" 
+                  className="text-2xl font-bold text-yellow-400 hover:text-yellow-300 transition-colors"
+                >
+                  +213 555 123 456
+                </a>
+                <p className="text-sm text-gray-400 mt-2">
+                  Available: Sunday - Thursday, 8:00 AM - 6:00 PM
+                </p>
+              </div>
+
+              {/* Social Media */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 hover:bg-white/20 transition-all duration-200">
+                <div className="text-4xl mb-4">🌐</div>
+                <h3 className="text-2xl font-bold mb-4">Follow Us</h3>
+                <p className="text-gray-300 mb-6">Connect with us on social media</p>
+                <div className="flex justify-center space-x-6">
+                  <a 
+                    href="https://facebook.com/drivingdz" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-3xl hover:text-blue-400 transition-colors"
+                    title="Facebook"
+                  >
+                    📘
+                  </a>
+                  <a 
+                    href="https://instagram.com/drivingdz" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-3xl hover:text-pink-400 transition-colors"
+                    title="Instagram"
+                  >
+                    📷
+                  </a>
+                  <a 
+                    href="https://youtube.com/drivingdz" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-3xl hover:text-red-400 transition-colors"
+                    title="YouTube"
+                  >
+                    📺
+                  </a>
+                  <a 
+                    href="https://twitter.com/drivingdz" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-3xl hover:text-blue-300 transition-colors"
+                    title="Twitter"
+                  >
+                    🐦
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Contact Info */}
+            <div className="mt-12 pt-8 border-t border-gray-700">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                  <h4 className="text-lg font-bold mb-2">📧 Email Support</h4>
+                  <a 
+                    href="mailto:support@drivingdz.com"
+                    className="text-blue-300 hover:text-blue-200 transition-colors"
+                  >
+                    support@drivingdz.com
+                  </a>
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold mb-2">🏢 Main Office</h4>
+                  <p className="text-gray-300">
+                    123 Rue de la République<br />
+                    Alger Centre, Algeria
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold mb-2">⏰ Business Hours</h4>
+                  <p className="text-gray-300">
+                    Sunday - Thursday: 8:00 AM - 6:00 PM<br />
+                    Friday - Saturday: Closed
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Copyright */}
+            <div className="mt-12 pt-8 border-t border-gray-700">
+              <p className="text-gray-400">
+                © 2024 DrivingDZ. All rights reserved. | Made with ❤️ for Algerian drivers
+              </p>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
