@@ -828,6 +828,104 @@ async def create_sample_data():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create sample data: {str(e)}")
 
+@api_router.post("/demo/create-sample-quizzes")
+async def create_sample_quizzes():
+    """Create sample quizzes for theory courses (DEMO ONLY)"""
+    try:
+        # Check if quizzes already exist
+        quiz_count = await db.quizzes.count_documents({})
+        if quiz_count > 0:
+            return {"message": "Sample quizzes already exist", "count": quiz_count}
+        
+        # Get all theory courses to create quizzes for
+        theory_courses = await db.courses.find({"course_type": "theory"}).to_list(1000)
+        
+        if len(theory_courses) == 0:
+            return {"message": "No theory courses found. Please enroll in a driving school first."}
+        
+        # Sample Algerian road signs quiz questions
+        sample_quiz_questions = [
+            {
+                "question": "What does this sign mean: Red circle with white horizontal bar?",
+                "options": ["No entry", "Stop", "Give way", "Speed limit"],
+                "correct_answer": "No entry"
+            },
+            {
+                "question": "At an intersection with no traffic signs, who has priority?",
+                "options": ["Vehicle from the left", "Vehicle from the right", "Larger vehicle", "Faster vehicle"],
+                "correct_answer": "Vehicle from the right"
+            },
+            {
+                "question": "What is the maximum speed limit in residential areas in Algeria?",
+                "options": ["30 km/h", "40 km/h", "50 km/h", "60 km/h"],
+                "correct_answer": "50 km/h"
+            },
+            {
+                "question": "When should you use your vehicle's hazard lights?",
+                "options": ["During rain", "When parking", "During emergency/breakdown", "At night"],
+                "correct_answer": "During emergency/breakdown"
+            },
+            {
+                "question": "What documents must you carry while driving in Algeria?",
+                "options": ["Only driving license", "License and registration", "License, registration, and insurance", "Only insurance"],
+                "correct_answer": "License, registration, and insurance"
+            },
+            {
+                "question": "What should you do when approaching a pedestrian crossing?",
+                "options": ["Speed up to pass quickly", "Slow down and be prepared to stop", "Honk the horn", "Maintain current speed"],
+                "correct_answer": "Slow down and be prepared to stop"
+            },
+            {
+                "question": "In Algeria, what is the legal minimum age to obtain a driving license?",
+                "options": ["16 years", "17 years", "18 years", "21 years"],
+                "correct_answer": "18 years"
+            },
+            {
+                "question": "What does a yellow traffic light mean?",
+                "options": ["Speed up", "Stop if safe to do so", "Continue at normal speed", "Reverse"],
+                "correct_answer": "Stop if safe to do so"
+            },
+            {
+                "question": "When parking on a hill, which way should you turn your wheels?",
+                "options": ["Always towards the curb", "Always away from the curb", "Towards the curb when facing downhill", "It doesn't matter"],
+                "correct_answer": "Towards the curb when facing downhill"
+            },
+            {
+                "question": "What is the purpose of the rearview mirror?",
+                "options": ["To see behind the vehicle", "To check appearance", "To signal other drivers", "To reduce glare"],
+                "correct_answer": "To see behind the vehicle"
+            }
+        ]
+        
+        created_quizzes = []
+        
+        # Create one quiz for each theory course
+        for course in theory_courses:
+            quiz_id = str(uuid.uuid4())
+            quiz_doc = {
+                "id": quiz_id,
+                "course_id": course["id"],
+                "title": "Theory Course Quiz - Road Signs & Rules",
+                "questions": sample_quiz_questions,
+                "time_limit_minutes": 30,
+                "passing_score": 70.0,
+                "created_at": datetime.utcnow()
+            }
+            
+            created_quizzes.append(quiz_doc)
+        
+        if created_quizzes:
+            await db.quizzes.insert_many(created_quizzes)
+        
+        return {
+            "message": "Sample quizzes created successfully",
+            "quizzes_created": len(created_quizzes),
+            "theory_courses": len(theory_courses)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create sample quizzes: {str(e)}")
+
 @app.post("/api/enrollments")
 async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dict = Depends(get_current_user)):
     # Allow guests and students to enroll
