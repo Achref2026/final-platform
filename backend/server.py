@@ -1571,7 +1571,72 @@ async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(
     }
     
     await db.teachers.insert_one(teacher_doc)
+    
+    # If current user is not already a teacher, assign teacher role as well
+    if current_user["role"] != "teacher":
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$set": {"role": "teacher"}}
+        )
+    
     return {"id": teacher_id, "message": "Teacher added successfully"}
+
+@app.post("/api/teachers/add-by-email")
+async def add_teacher_by_email(
+    email: str = Form(...),
+    driving_license_url: str = Form(...),
+    teaching_license_url: str = Form(...),
+    photo_url: str = Form(...),
+    can_teach_male: bool = Form(True),
+    can_teach_female: bool = Form(True),
+    current_user: dict = Depends(get_current_user)
+):
+    """Add an existing user as a teacher by their email"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can add teachers")
+    
+    # Find the manager's driving school
+    school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
+    if not school:
+        raise HTTPException(status_code=404, detail="Manager's driving school not found")
+    
+    # Find the user by email
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User with this email not found")
+    
+    # Check if user is already a teacher at this school
+    existing_teacher = await db.teachers.find_one({
+        "user_id": user["id"],
+        "driving_school_id": school["id"]
+    })
+    if existing_teacher:
+        raise HTTPException(status_code=400, detail="User is already a teacher at this school")
+    
+    teacher_id = str(uuid.uuid4())
+    teacher_doc = {
+        "id": teacher_id,
+        "user_id": user["id"],
+        "driving_school_id": school["id"],
+        "driving_license_url": driving_license_url,
+        "teaching_license_url": teaching_license_url,
+        "photo_url": photo_url,
+        "can_teach_male": can_teach_male,
+        "can_teach_female": can_teach_female,
+        "rating": 0.0,
+        "total_reviews": 0,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.teachers.insert_one(teacher_doc)
+    
+    # Assign teacher role to the user
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"role": "teacher"}}
+    )
+    
+    return {"id": teacher_id, "message": f"Teacher {user['first_name']} {user['last_name']} added successfully"}
 
 # Payment Integration APIs
 @app.post("/api/payments/initiate")
