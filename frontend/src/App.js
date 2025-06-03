@@ -1512,25 +1512,69 @@ function App() {
         </div>
       ) : (
         <>
+          {/* Quick Actions */}
+          <div className="dashboard-section">
+            <h3 className="section-title">🚀 Quick Actions</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <button
+                onClick={() => alert('Feature coming soon!')}
+                className="quick-action-card"
+              >
+                <div className="text-3xl mb-2">👨‍🏫</div>
+                <h4 className="font-bold text-gray-900">Add Teacher</h4>
+                <p className="text-sm text-gray-600">Recruit new instructors</p>
+              </button>
+              
+              <button
+                onClick={() => alert('Feature coming soon!')}
+                className="quick-action-card"
+              >
+                <div className="text-3xl mb-2">📊</div>
+                <h4 className="font-bold text-gray-900">View Reports</h4>
+                <p className="text-sm text-gray-600">Analytics & insights</p>
+              </button>
+              
+              <button
+                onClick={() => alert('Feature coming soon!')}
+                className="quick-action-card"
+              >
+                <div className="text-3xl mb-2">✅</div>
+                <h4 className="font-bold text-gray-900">Approve Students</h4>
+                <p className="text-sm text-gray-600">Review enrollments</p>
+              </button>
+              
+              <button
+                onClick={() => setCurrentPage('register-school')}
+                className="quick-action-card"
+              >
+                <div className="text-3xl mb-2">⚙️</div>
+                <h4 className="font-bold text-gray-900">School Settings</h4>
+                <p className="text-sm text-gray-600">Manage your school</p>
+              </button>
+            </div>
+          </div>
+
           {/* School Info */}
           <div className="dashboard-section">
-            <h3 className="section-title">School Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <p className="text-sm text-gray-600">School Name</p>
-                <p className="font-bold text-lg">{dashboardData.school.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Location</p>
-                <p className="font-medium">{dashboardData.school.address}, {dashboardData.school.state}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Price</p>
-                <p className="font-bold text-green-600 text-lg">{dashboardData.school.price.toLocaleString()} DZD</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Rating</p>
-                <p className="font-medium">⭐ {dashboardData.school.rating.toFixed(1)} ({dashboardData.school.total_reviews} reviews)</p>
+            <h3 className="section-title">🏫 School Information</h3>
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm text-gray-600">School Name</p>
+                  <p className="font-bold text-xl text-blue-900">{dashboardData.school.name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Location</p>
+                  <p className="font-medium text-gray-700">{dashboardData.school.address}, {dashboardData.school.state}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Course Price</p>
+                  <p className="font-bold text-green-600 text-xl">{dashboardData.school.price.toLocaleString()} DZD</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Rating</p>
+                  <p className="font-medium text-gray-700">⭐ {dashboardData.school.rating.toFixed(1)} ({dashboardData.school.total_reviews} reviews)</p>
+                </div>
               </div>
             </div>
           </div>
@@ -1578,7 +1622,7 @@ function App() {
             </div>
           </div>
 
-          {/* Teachers */}
+          {/* Teachers Management */}
           <div className="dashboard-section">
             <h3 className="section-title">Teachers</h3>
             {dashboardData.teachers.length === 0 ? (
