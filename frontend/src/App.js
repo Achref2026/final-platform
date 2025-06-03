@@ -433,6 +433,99 @@ function App() {
     setShowDocumentList(false);
   };
 
+  // Quiz Management Functions
+  const fetchQuizzes = async (courseId) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`${BACKEND_URL}/api/quizzes/course/${courseId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setQuizzes(data);
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching quizzes:', error);
+      return [];
+    }
+  };
+
+  const openQuiz = async (courseId) => {
+    const courseQuizzes = await fetchQuizzes(courseId);
+    if (courseQuizzes.length > 0) {
+      setCurrentQuiz(courseQuizzes[0]); // Take the first quiz for the course
+      setActiveQuiz(courseQuizzes[0]);
+      setQuizAnswers({});
+      setQuizSubmitted(false);
+      setQuizResult(null);
+      setShowQuizModal(true);
+    } else {
+      alert('No quizzes available for this course yet.');
+    }
+  };
+
+  const handleQuizAnswer = (questionIndex, answer) => {
+    setQuizAnswers(prev => ({
+      ...prev,
+      [questionIndex]: answer
+    }));
+  };
+
+  const submitQuiz = async () => {
+    if (!activeQuiz) return;
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      const answers = Object.keys(quizAnswers).map(questionIndex => ({
+        question_index: parseInt(questionIndex),
+        answer: quizAnswers[questionIndex]
+      }));
+
+      const formData = new FormData();
+      formData.append('quiz_id', activeQuiz.id);
+      formData.append('answers', JSON.stringify(answers));
+
+      const response = await fetch(`${BACKEND_URL}/api/quiz-attempts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setQuizResult(result);
+        setQuizSubmitted(true);
+        
+        // Refresh dashboard data to update progress
+        if (currentPage === 'dashboard') {
+          setTimeout(() => {
+            fetchDashboardData();
+          }, 1000);
+        }
+      } else {
+        alert('Failed to submit quiz. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error submitting quiz:', error);
+      alert('Error submitting quiz. Please try again.');
+    }
+  };
+
+  const closeQuizModal = () => {
+    setShowQuizModal(false);
+    setCurrentQuiz(null);
+    setActiveQuiz(null);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizResult(null);
+  };
+
   const renderNavigation = () => (
     <header className="bg-white/95 backdrop-blur-sm shadow-lg sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
