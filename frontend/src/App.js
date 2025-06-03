@@ -172,8 +172,7 @@ function App() {
           phone: '',
           address: '',
           date_of_birth: '',
-          gender: 'male',
-          role: 'student'
+          gender: 'male'
         });
       } else {
         console.error('Auth failed but response was ok:', data);
