@@ -668,11 +668,19 @@ async def create_driving_school(
     photos: List[UploadFile] = File([]),
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can create driving schools")
+    # Allow guests and managers to create driving schools
+    if current_user["role"] not in ["guest", "manager"]:
+        raise HTTPException(status_code=403, detail="Only guests and managers can create driving schools")
     
     if state not in ALGERIAN_STATES:
         raise HTTPException(status_code=400, detail="Invalid state")
+    
+    # If user is guest, upgrade them to manager role
+    if current_user["role"] == "guest":
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$set": {"role": "manager"}}
+        )
     
     # Handle logo upload
     logo_url = None
@@ -717,9 +725,12 @@ async def create_driving_school(
     }
     
     await db.driving_schools.insert_one(school_doc)
+    
+    role_message = " You are now a manager!" if current_user["role"] == "guest" else ""
+    
     return {
         "id": school_id, 
-        "message": "Driving school created successfully",
+        "message": f"Driving school created successfully!{role_message}",
         "logo_url": logo_url,
         "photos": photo_urls
     }
