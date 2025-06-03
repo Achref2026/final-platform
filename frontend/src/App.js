@@ -38,8 +38,7 @@ function App() {
     phone: '',
     address: '',
     date_of_birth: '',
-    gender: 'male',
-    role: 'student'
+    gender: 'male'
   });
 
   // Video call state
