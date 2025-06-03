@@ -50,6 +50,16 @@ function App() {
   const [uploadDocumentType, setUploadDocumentType] = useState('');
   const [showDocumentList, setShowDocumentList] = useState(false);
 
+  // Quiz system state
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [currentQuiz, setCurrentQuiz] = useState(null);
+  const [quizzes, setQuizzes] = useState([]);
+  const [quizAttempts, setQuizAttempts] = useState([]);
+  const [activeQuiz, setActiveQuiz] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [quizResult, setQuizResult] = useState(null);
+
   // Load user data from localStorage on component mount
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
