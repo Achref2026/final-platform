@@ -519,3 +519,49 @@ body {
 .stat-value {
   @apply text-2xl font-bold text-gray-900;
 }
+
+/* Quick Action Cards */
+.quick-action-card {
+  @apply bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-all duration-200 text-center;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.quick-action-card:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+
+/* Course and Enrollment Cards */
+.course-card, .enrollment-card {
+  @apply bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-all duration-200;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.course-card:hover, .enrollment-card:hover {
+  transform: translateY(-2px);
+}
+
+.teacher-card {
+  @apply bg-white rounded-lg shadow-md border border-gray-200 p-4 hover:shadow-lg transition-all duration-200;
+}
+
+.progress-card {
+  @apply bg-gray-50 rounded-lg border border-gray-200 p-4;
+}
+
+/* Status Badges */
+.status-badge {
+  @apply px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.status-completed {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-pending {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-failed {
+  @apply bg-red-100 text-red-800;
+}
