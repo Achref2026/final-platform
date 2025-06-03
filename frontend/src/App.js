@@ -1872,6 +1872,106 @@ function App() {
         </div>
       )}
 
+      {/* Quiz Modal */}
+      {showQuizModal && activeQuiz && (
+        <div className="modal-backdrop">
+          <div className="modal-container max-w-4xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-gray-900">
+                📝 {activeQuiz.title}
+              </h2>
+              <button
+                onClick={closeQuizModal}
+                className="text-gray-400 hover:text-gray-600 text-3xl font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {!quizSubmitted ? (
+              <div className="space-y-6">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-blue-800">
+                    <span className="font-bold">Time Limit:</span> {activeQuiz.time_limit_minutes} minutes
+                  </p>
+                  <p className="text-blue-800">
+                    <span className="font-bold">Passing Score:</span> {activeQuiz.passing_score}%
+                  </p>
+                  <p className="text-blue-800">
+                    <span className="font-bold">Questions:</span> {activeQuiz.questions.length}
+                  </p>
+                </div>
+                
+                {activeQuiz.questions.map((question, index) => (
+                  <div key={index} className="bg-white p-6 rounded-lg border border-gray-200">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">
+                      {index + 1}. {question.question}
+                    </h3>
+                    
+                    <div className="space-y-2">
+                      {question.options.map((option, optionIndex) => (
+                        <label key={optionIndex} className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`question_${index}`}
+                            value={option}
+                            checked={quizAnswers[index] === option}
+                            onChange={() => handleQuizAnswer(index, option)}
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-gray-700">{option}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                
+                <div className="flex justify-between items-center pt-6">
+                  <p className="text-gray-600">
+                    Answered: {Object.keys(quizAnswers).length} / {activeQuiz.questions.length}
+                  </p>
+                  <button
+                    onClick={submitQuiz}
+                    disabled={Object.keys(quizAnswers).length !== activeQuiz.questions.length}
+                    className="btn-primary disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    📤 Submit Quiz
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center space-y-6">
+                <div className={`text-8xl ${quizResult.passed ? 'text-green-500' : 'text-red-500'}`}>
+                  {quizResult.passed ? '🎉' : '😔'}
+                </div>
+                
+                <div>
+                  <h3 className="text-3xl font-bold mb-4">
+                    {quizResult.passed ? 'Congratulations!' : 'Keep Practicing!'}
+                  </h3>
+                  <p className="text-xl text-gray-700 mb-4">
+                    Your Score: <span className="font-bold text-2xl">{quizResult.score.toFixed(1)}%</span>
+                  </p>
+                  <p className="text-gray-600">
+                    {quizResult.passed 
+                      ? 'You passed the quiz! Great job on mastering the theory.' 
+                      : `You need ${activeQuiz.passing_score}% to pass. Review the material and try again.`
+                    }
+                  </p>
+                </div>
+                
+                <button
+                  onClick={closeQuizModal}
+                  className="btn-primary"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Contact Us Section */}
       <footer className="bg-gradient-to-r from-gray-900 to-blue-900 text-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
