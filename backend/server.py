@@ -71,8 +71,6 @@ cloudinary.config(
     api_secret=os.environ.get('CLOUDINARY_API_SECRET')
 )
 
-# API router will be included at the end of the file after all endpoints are defined
-
 # Basic routes that don't need /api prefix
 @app.get("/health")
 async def health_check():
@@ -100,13 +98,15 @@ class PaymentStatus(str, Enum):
     FAILED = "failed"
 
 class CourseStatus(str, Enum):
-    NOT_STARTED = "not_started"
+    LOCKED = "locked"  # Can't start yet
+    AVAILABLE = "available"  # Can start
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
 
 class ExamStatus(str, Enum):
-    NOT_TAKEN = "not_taken"
+    NOT_AVAILABLE = "not_available"
+    AVAILABLE = "available"
     PASSED = "passed"
     FAILED = "failed"
 
@@ -116,6 +116,14 @@ class DocumentType(str, Enum):
     MEDICAL_CERTIFICATE = "medical_certificate"
     DRIVING_LICENSE = "driving_license"
     TEACHING_LICENSE = "teaching_license"
+
+class EnrollmentStatus(str, Enum):
+    PENDING_PAYMENT = "pending_payment"
+    PENDING_APPROVAL = "pending_approval"
+    PENDING_DOCUMENTS = "pending_documents"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    COMPLETED = "completed"
 
 # Pydantic Models
 class UserBase(BaseModel):
@@ -129,7 +137,6 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
-    # Role will be assigned automatically - removed from user input
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -145,7 +152,7 @@ class DrivingSchool(BaseModel):
     id: str
     name: str
     address: str
-    state: str  # One of the 58 Algerian states
+    state: str
     phone: str
     email: EmailStr
     description: str
@@ -181,12 +188,11 @@ class Teacher(BaseModel):
     can_teach_female: bool = True
     rating: float = 0.0
     total_reviews: int = 0
+    is_approved: bool = False
     created_at: datetime
 
 class TeacherCreate(BaseModel):
-    driving_license_url: str
-    teaching_license_url: str
-    photo_url: str
+    email: str
     can_teach_male: bool = True
     can_teach_female: bool = True
 
@@ -196,7 +202,7 @@ class Enrollment(BaseModel):
     driving_school_id: str
     amount: float
     payment_status: PaymentStatus
-    is_approved: bool = False
+    enrollment_status: EnrollmentStatus
     created_at: datetime
     approved_at: Optional[datetime] = None
 
@@ -212,35 +218,10 @@ class Course(BaseModel):
     scheduled_sessions: List[dict] = []
     completed_sessions: int = 0
     total_sessions: int
-    exam_status: ExamStatus = ExamStatus.NOT_TAKEN
+    exam_status: ExamStatus = ExamStatus.NOT_AVAILABLE
     exam_score: Optional[float] = None
     created_at: datetime
     updated_at: datetime
-
-class CourseSession(BaseModel):
-    id: str
-    course_id: str
-    teacher_id: str
-    student_id: str
-    scheduled_time: datetime
-    duration_minutes: int
-    status: str  # scheduled, completed, cancelled
-    notes: Optional[str] = None
-    daily_room_url: Optional[str] = None
-    daily_room_name: Optional[str] = None
-    recording_url: Optional[str] = None
-    created_at: datetime
-
-class CourseSessionCreate(BaseModel):
-    course_id: str
-    scheduled_time: datetime
-    duration_minutes: int = 60
-
-class VideoRoomCreate(BaseModel):
-    room_name: str
-    course_id: str
-    privacy: str = "private"
-    properties: dict = {}
 
 class DocumentUpload(BaseModel):
     id: str
@@ -251,30 +232,6 @@ class DocumentUpload(BaseModel):
     file_size: int
     upload_date: datetime
     is_verified: bool = False
-
-class Quiz(BaseModel):
-    id: str
-    course_id: str
-    title: str
-    questions: List[dict]
-    time_limit_minutes: int
-    passing_score: float
-    created_at: datetime
-
-class QuizAttempt(BaseModel):
-    id: str
-    quiz_id: str
-    student_id: str
-    answers: List[dict]
-    score: float
-    passed: bool
-    completed_at: datetime
-
-class BaridimobPayment(BaseModel):
-    enrollment_id: str
-    amount: float
-    merchant_id: str
-    transaction_id: str
 
 # Algerian States (58 wilayas)
 ALGERIAN_STATES = [
@@ -289,6 +246,16 @@ ALGERIAN_STATES = [
     "Bordj Badji Mokhtar", "Ouled Djellal", "Béni Abbès", "In Salah", 
     "In Guezzam", "Touggourt", "Djanet", "El M'Ghair", "El Meniaa"
 ]
+
+# Course sequence order
+COURSE_SEQUENCE = [CourseType.THEORY, CourseType.PARK, CourseType.ROAD]
+
+# Required documents by role
+REQUIRED_DOCUMENTS = {
+    UserRole.STUDENT: [DocumentType.PROFILE_PHOTO, DocumentType.ID_CARD, DocumentType.MEDICAL_CERTIFICATE],
+    UserRole.TEACHER: [DocumentType.PROFILE_PHOTO, DocumentType.ID_CARD, DocumentType.DRIVING_LICENSE, DocumentType.TEACHING_LICENSE],
+    UserRole.MANAGER: [DocumentType.PROFILE_PHOTO, DocumentType.ID_CARD]
+}
 
 # Helper functions
 def hash_password(password: str) -> str:
@@ -336,27 +303,79 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
-async def create_default_courses(enrollment_id: str):
-    """Create default courses for a new enrollment"""
-    course_types = [
+async def check_user_documents_complete(user_id: str, role: str) -> bool:
+    """Check if user has uploaded and verified all required documents"""
+    required_docs = REQUIRED_DOCUMENTS.get(role, [])
+    
+    documents_cursor = db.documents.find({
+        "user_id": user_id,
+        "is_verified": True,
+        "document_type": {"$in": [doc.value for doc in required_docs]}
+    })
+    documents = await documents_cursor.to_list(length=None)
+    
+    uploaded_types = {doc["document_type"] for doc in documents}
+    required_types = {doc.value for doc in required_docs}
+    
+    return required_types.issubset(uploaded_types)
+
+async def update_course_availability(enrollment_id: str):
+    """Update course availability based on completion status"""
+    courses_cursor = db.courses.find({"enrollment_id": enrollment_id}).sort("course_type", 1)
+    courses = await courses_cursor.to_list(length=None)
+    
+    # Sort courses by sequence
+    course_order = {CourseType.THEORY: 0, CourseType.PARK: 1, CourseType.ROAD: 2}
+    courses.sort(key=lambda x: course_order[x["course_type"]])
+    
+    for i, course in enumerate(courses):
+        if i == 0:  # First course (theory) is always available
+            if course["status"] == CourseStatus.LOCKED:
+                await db.courses.update_one(
+                    {"id": course["id"]},
+                    {"$set": {"status": CourseStatus.AVAILABLE, "updated_at": datetime.utcnow()}}
+                )
+        else:
+            # Check if previous course is completed and exam passed
+            prev_course = courses[i-1]
+            if prev_course["exam_status"] == ExamStatus.PASSED:
+                if course["status"] == CourseStatus.LOCKED:
+                    await db.courses.update_one(
+                        {"id": course["id"]},
+                        {"$set": {"status": CourseStatus.AVAILABLE, "updated_at": datetime.utcnow()}}
+                    )
+            else:
+                # Lock the course if previous not completed
+                if course["status"] != CourseStatus.LOCKED:
+                    await db.courses.update_one(
+                        {"id": course["id"]},
+                        {"$set": {"status": CourseStatus.LOCKED, "updated_at": datetime.utcnow()}}
+                    )
+
+async def create_sequential_courses(enrollment_id: str):
+    """Create courses with proper sequential logic"""
+    courses = []
+    course_configs = [
         {"type": CourseType.THEORY, "sessions": 10},
         {"type": CourseType.PARK, "sessions": 5}, 
         {"type": CourseType.ROAD, "sessions": 15}
     ]
     
-    courses = []
-    for course_config in course_types:
+    for i, course_config in enumerate(course_configs):
         course_id = str(uuid.uuid4())
+        # Only first course (theory) is available initially
+        initial_status = CourseStatus.AVAILABLE if i == 0 else CourseStatus.LOCKED
+        
         course_doc = {
             "id": course_id,
             "enrollment_id": enrollment_id,
             "course_type": course_config["type"],
-            "status": CourseStatus.NOT_STARTED,
+            "status": initial_status,
             "teacher_id": None,
             "scheduled_sessions": [],
             "completed_sessions": 0,
             "total_sessions": course_config["sessions"],
-            "exam_status": ExamStatus.NOT_TAKEN,
+            "exam_status": ExamStatus.NOT_AVAILABLE,
             "exam_score": None,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
@@ -366,103 +385,12 @@ async def create_default_courses(enrollment_id: str):
     await db.courses.insert_many(courses)
     return courses
 
-# Daily.co API functions
-async def create_daily_room(room_name: str, properties: dict = None):
-    """Create a Daily.co video room"""
-    if not DAILY_API_KEY or DAILY_API_KEY.startswith("demo-"):
-        # Return demo room for testing
-        return {
-            "url": f"https://demo.daily.co/{room_name}",
-            "name": room_name,
-            "id": str(uuid.uuid4()),
-            "api_created": True,
-            "privacy": "private",
-            "config": {"start_video_off": False, "start_audio_off": False}
-        }
-    
-    if properties is None:
-        properties = {
-            "enable_screenshare": True,
-            "enable_chat": True,
-            "start_video_off": False,
-            "start_audio_off": False,
-            "max_participants": 10
-        }
-    
-    headers = {
-        "Authorization": f"Bearer {DAILY_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "name": room_name,
-        "privacy": "private",
-        "properties": properties
-    }
-    
-    try:
-        response = requests.post(f"{DAILY_API_URL}/rooms", json=payload, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        # Fallback to demo room if API fails
-        return {
-            "url": f"https://demo.daily.co/{room_name}",
-            "name": room_name,
-            "id": str(uuid.uuid4()),
-            "api_created": False,
-            "error": str(e)
-        }
-
-async def get_daily_room(room_name: str):
-    """Get Daily.co room information"""
-    if not DAILY_API_KEY or DAILY_API_KEY.startswith("demo-"):
-        return {
-            "url": f"https://demo.daily.co/{room_name}",
-            "name": room_name,
-            "privacy": "private",
-            "config": {}
-        }
-    
-    headers = {
-        "Authorization": f"Bearer {DAILY_API_KEY}"
-    }
-    
-    try:
-        response = requests.get(f"{DAILY_API_URL}/rooms/{room_name}", headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        return {
-            "url": f"https://demo.daily.co/{room_name}",
-            "name": room_name,
-            "error": str(e)
-        }
-
-async def delete_daily_room(room_name: str):
-    """Delete Daily.co room"""
-    if not DAILY_API_KEY or DAILY_API_KEY.startswith("demo-"):
-        return {"deleted": True, "name": room_name, "demo": True}
-    
-    headers = {
-        "Authorization": f"Bearer {DAILY_API_KEY}"
-    }
-    
-    try:
-        response = requests.delete(f"{DAILY_API_URL}/rooms/{room_name}", headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        return {"deleted": False, "error": str(e)}
-
 # Cloudinary upload function
 async def upload_to_cloudinary(file: UploadFile, folder: str, resource_type: str = "auto"):
     """Upload file to Cloudinary"""
     try:
-        # Read file content
         file_content = await file.read()
         
-        # Upload to Cloudinary
         upload_result = cloudinary.uploader.upload(
             file_content,
             folder=folder,
@@ -482,8 +410,7 @@ async def upload_to_cloudinary(file: UploadFile, folder: str, resource_type: str
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
-# API Routes - Add the basic routes to API router
-
+# API Routes
 @api_router.get("/health")
 async def api_health_check():
     return {"status": "healthy", "message": "Driving School Platform API is running"}
@@ -494,7 +421,6 @@ async def get_states():
 
 @api_router.post("/auth/register", response_model=dict)
 async def register_user(
-    # User data
     email: str = Form(...),
     password: str = Form(...),
     first_name: str = Form(...),
@@ -504,7 +430,6 @@ async def register_user(
     date_of_birth: str = Form(...),
     gender: str = Form(...),
     state: str = Form(...),
-    # Optional profile photo
     profile_photo: Optional[UploadFile] = File(None)
 ):
     try:
@@ -538,7 +463,6 @@ async def register_user(
                 profile_photo_url = upload_result["file_url"]
             except Exception as e:
                 logger.warning(f"Failed to upload profile photo: {str(e)}")
-                # Continue without photo - don't fail registration
         
         # Create user with default "guest" role
         user_data = {
@@ -551,7 +475,7 @@ async def register_user(
             "address": address,
             "date_of_birth": birth_date,
             "gender": gender,
-            "role": "guest",  # Default role for new users
+            "role": "guest",
             "state": state,
             "profile_photo_url": profile_photo_url,
             "created_at": datetime.utcnow(),
@@ -559,9 +483,6 @@ async def register_user(
         }
         
         await db.users.insert_one(user_data)
-        
-        # No role-specific profiles created during registration
-        # Profiles will be created when roles are assigned
         
         # Generate access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -618,7 +539,6 @@ async def get_driving_schools(state: Optional[str] = None, limit: int = 20, skip
     schools = await schools_cursor.to_list(length=limit)
     total = await db.driving_schools.count_documents(query)
     
-    # Serialize the documents
     serialized_schools = serialize_doc(schools)
     
     return {
@@ -635,7 +555,7 @@ async def get_driving_school(school_id: str):
         raise HTTPException(status_code=404, detail="Driving school not found")
     
     # Get teachers for this school
-    teachers_cursor = db.teachers.find({"driving_school_id": school_id})
+    teachers_cursor = db.teachers.find({"driving_school_id": school_id, "is_approved": True})
     teachers = await teachers_cursor.to_list(length=None)
     
     # Enrich teachers with user data
@@ -644,7 +564,6 @@ async def get_driving_school(school_id: str):
         if user:
             teacher["user"] = serialize_doc(user)
     
-    # Serialize the documents
     serialized_school = serialize_doc(school)
     serialized_teachers = serialize_doc(teachers)
     serialized_school["teachers"] = serialized_teachers
@@ -653,7 +572,6 @@ async def get_driving_school(school_id: str):
 
 @api_router.post("/driving-schools")
 async def create_driving_school(
-    # School data
     name: str = Form(...),
     address: str = Form(...),
     state: str = Form(...),
@@ -663,7 +581,6 @@ async def create_driving_school(
     price: float = Form(...),
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
-    # Optional files
     logo: Optional[UploadFile] = File(None),
     photos: List[UploadFile] = File([]),
     current_user: dict = Depends(get_current_user)
@@ -690,19 +607,17 @@ async def create_driving_school(
             logo_url = upload_result["file_url"]
         except Exception as e:
             logger.warning(f"Failed to upload logo: {str(e)}")
-            # Continue without logo - don't fail school creation
     
     # Handle photos upload
     photo_urls = []
     if photos:
         for photo in photos:
-            if photo.size > 0:  # Check if file is not empty
+            if photo.size > 0:
                 try:
                     upload_result = await upload_to_cloudinary(photo, "driving_schools/photos", "image")
                     photo_urls.append(upload_result["file_url"])
                 except Exception as e:
                     logger.warning(f"Failed to upload photo {photo.filename}: {str(e)}")
-                    # Continue with other photos
     
     school_id = str(uuid.uuid4())
     school_doc = {
@@ -735,198 +650,7 @@ async def create_driving_school(
         "photos": photo_urls
     }
 
-# Demo Data Creation API
-@api_router.post("/demo/create-sample-data")
-async def create_sample_data():
-    """Create sample data for testing (DEMO ONLY)"""
-    try:
-        # Sample Algerian road signs quiz questions
-        sample_quiz_questions = [
-            {
-                "question": "What does this sign mean: Red circle with white horizontal bar?",
-                "options": ["No entry", "Stop", "Give way", "Speed limit"],
-                "correct_answer": "No entry"
-            },
-            {
-                "question": "At an intersection with no traffic signs, who has priority?",
-                "options": ["Vehicle from the left", "Vehicle from the right", "Larger vehicle", "Faster vehicle"],
-                "correct_answer": "Vehicle from the right"
-            },
-            {
-                "question": "What is the maximum speed limit in residential areas in Algeria?",
-                "options": ["30 km/h", "40 km/h", "50 km/h", "60 km/h"],
-                "correct_answer": "50 km/h"
-            },
-            {
-                "question": "When should you use your vehicle's hazard lights?",
-                "options": ["During rain", "When parking", "During emergency/breakdown", "At night"],
-                "correct_answer": "During emergency/breakdown"
-            },
-            {
-                "question": "What documents must you carry while driving in Algeria?",
-                "options": ["Only driving license", "License and registration", "License, registration, and insurance", "Only insurance"],
-                "correct_answer": "License, registration, and insurance"
-            }
-        ]
-        
-        # Create sample schools if none exist
-        school_count = await db.driving_schools.count_documents({})
-        if school_count == 0:
-            sample_schools = [
-                {
-                    "id": str(uuid.uuid4()),
-                    "name": "École de Conduite Alger Centre",
-                    "address": "Rue Didouche Mourad, Alger Centre",
-                    "state": "Alger",
-                    "phone": "+213 21 123 456",
-                    "email": "contact@ecolealger.dz",
-                    "description": "École de conduite moderne au cœur d'Alger avec instructeurs expérimentés",
-                    "price": 25000.0,
-                    "rating": 4.5,
-                    "total_reviews": 127,
-                    "manager_id": "demo-manager-1",
-                    "created_at": datetime.utcnow()
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "name": "Auto-École Oran Modern",
-                    "address": "Boulevard de la Révolution, Oran",
-                    "state": "Oran",
-                    "phone": "+213 41 789 123",
-                    "email": "info@oranmodern.dz",
-                    "description": "Formation complète avec véhicules récents et simulateurs",
-                    "price": 28000.0,
-                    "rating": 4.7,
-                    "total_reviews": 89,
-                    "manager_id": "demo-manager-2",
-                    "created_at": datetime.utcnow()
-                },
-                {
-                    "id": str(uuid.uuid4()),
-                    "name": "École Conduite Constantine",
-                    "address": "Rue Ben Badis, Constantine",
-                    "state": "Constantine",
-                    "phone": "+213 31 456 789",
-                    "email": "ecole@constantine-conduite.dz",
-                    "description": "Spécialisée dans la formation des conducteurs débutants",
-                    "price": 22000.0,
-                    "rating": 4.2,
-                    "total_reviews": 156,
-                    "manager_id": "demo-manager-3",
-                    "created_at": datetime.utcnow()
-                }
-            ]
-            
-            await db.driving_schools.insert_many(sample_schools)
-            
-        return {
-            "message": "Sample data created successfully",
-            "quiz_questions": len(sample_quiz_questions),
-            "sample_schools": 3
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create sample data: {str(e)}")
-
-@api_router.post("/demo/create-sample-quizzes")
-async def create_sample_quizzes():
-    """Create sample quizzes for theory courses (DEMO ONLY)"""
-    try:
-        # Check if quizzes already exist
-        quiz_count = await db.quizzes.count_documents({})
-        if quiz_count > 0:
-            return {"message": "Sample quizzes already exist", "count": quiz_count}
-        
-        # Get all theory courses to create quizzes for
-        theory_courses = await db.courses.find({"course_type": "theory"}).to_list(1000)
-        
-        if len(theory_courses) == 0:
-            return {"message": "No theory courses found. Please enroll in a driving school first."}
-        
-        # Sample Algerian road signs quiz questions
-        sample_quiz_questions = [
-            {
-                "question": "What does this sign mean: Red circle with white horizontal bar?",
-                "options": ["No entry", "Stop", "Give way", "Speed limit"],
-                "correct_answer": "No entry"
-            },
-            {
-                "question": "At an intersection with no traffic signs, who has priority?",
-                "options": ["Vehicle from the left", "Vehicle from the right", "Larger vehicle", "Faster vehicle"],
-                "correct_answer": "Vehicle from the right"
-            },
-            {
-                "question": "What is the maximum speed limit in residential areas in Algeria?",
-                "options": ["30 km/h", "40 km/h", "50 km/h", "60 km/h"],
-                "correct_answer": "50 km/h"
-            },
-            {
-                "question": "When should you use your vehicle's hazard lights?",
-                "options": ["During rain", "When parking", "During emergency/breakdown", "At night"],
-                "correct_answer": "During emergency/breakdown"
-            },
-            {
-                "question": "What documents must you carry while driving in Algeria?",
-                "options": ["Only driving license", "License and registration", "License, registration, and insurance", "Only insurance"],
-                "correct_answer": "License, registration, and insurance"
-            },
-            {
-                "question": "What should you do when approaching a pedestrian crossing?",
-                "options": ["Speed up to pass quickly", "Slow down and be prepared to stop", "Honk the horn", "Maintain current speed"],
-                "correct_answer": "Slow down and be prepared to stop"
-            },
-            {
-                "question": "In Algeria, what is the legal minimum age to obtain a driving license?",
-                "options": ["16 years", "17 years", "18 years", "21 years"],
-                "correct_answer": "18 years"
-            },
-            {
-                "question": "What does a yellow traffic light mean?",
-                "options": ["Speed up", "Stop if safe to do so", "Continue at normal speed", "Reverse"],
-                "correct_answer": "Stop if safe to do so"
-            },
-            {
-                "question": "When parking on a hill, which way should you turn your wheels?",
-                "options": ["Always towards the curb", "Always away from the curb", "Towards the curb when facing downhill", "It doesn't matter"],
-                "correct_answer": "Towards the curb when facing downhill"
-            },
-            {
-                "question": "What is the purpose of the rearview mirror?",
-                "options": ["To see behind the vehicle", "To check appearance", "To signal other drivers", "To reduce glare"],
-                "correct_answer": "To see behind the vehicle"
-            }
-        ]
-        
-        created_quizzes = []
-        
-        # Create one quiz for each theory course
-        for course in theory_courses:
-            quiz_id = str(uuid.uuid4())
-            quiz_doc = {
-                "id": quiz_id,
-                "course_id": course["id"],
-                "title": "Theory Course Quiz - Road Signs & Rules",
-                "questions": sample_quiz_questions,
-                "time_limit_minutes": 30,
-                "passing_score": 70.0,
-                "created_at": datetime.utcnow()
-            }
-            
-            created_quizzes.append(quiz_doc)
-        
-        if created_quizzes:
-            await db.quizzes.insert_many(created_quizzes)
-        
-        return {
-            "message": "Sample quizzes created successfully",
-            "quizzes_created": len(created_quizzes),
-            "theory_courses": len(theory_courses)
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create sample quizzes: {str(e)}")
-
-@app.post("/api/enrollments")
+@api_router.post("/enrollments")
 async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dict = Depends(get_current_user)):
     # Allow guests and students to enroll
     if current_user["role"] not in ["guest", "student"]:
@@ -951,17 +675,6 @@ async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dic
             {"id": current_user["id"]},
             {"$set": {"role": "student"}}
         )
-        
-        # Create student profile
-        student_profile = {
-            "id": str(uuid.uuid4()),
-            "user_id": current_user["id"],
-            "documents": {},
-            "medical_info": {},
-            "enrollment_status": "enrolled",
-            "created_at": datetime.utcnow()
-        }
-        await db.student_profiles.insert_one(student_profile)
     
     enrollment_id = str(uuid.uuid4())
     enrollment_doc = {
@@ -970,22 +683,48 @@ async def create_enrollment(enrollment_data: EnrollmentCreate, current_user: dic
         "driving_school_id": enrollment_data.school_id,
         "amount": school["price"],
         "payment_status": PaymentStatus.PENDING,
-        "is_approved": False,
+        "enrollment_status": EnrollmentStatus.PENDING_PAYMENT,
         "created_at": datetime.utcnow()
     }
     
     await db.enrollments.insert_one(enrollment_doc)
     
-    # Create default courses for the enrollment
-    await create_default_courses(enrollment_id)
+    # Create sequential courses
+    await create_sequential_courses(enrollment_id)
     
     return {
         "enrollment_id": enrollment_id,
         "amount": school["price"],
-        "message": "Enrollment created. You are now a student! Please proceed with payment."
+        "message": "Enrollment created. You are now a student! Please proceed with payment and document upload."
     }
 
-@app.get("/api/enrollments/my")
+@api_router.post("/payments/complete")
+async def complete_payment(
+    enrollment_id: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark payment as completed (simplified for demo)"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can complete payments")
+    
+    enrollment = await db.enrollments.find_one({"id": enrollment_id, "student_id": current_user["id"]})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    # Update payment status and enrollment status
+    await db.enrollments.update_one(
+        {"id": enrollment_id},
+        {
+            "$set": {
+                "payment_status": PaymentStatus.COMPLETED,
+                "enrollment_status": EnrollmentStatus.PENDING_DOCUMENTS
+            }
+        }
+    )
+    
+    return {"message": "Payment completed successfully. Please upload required documents."}
+
+@api_router.get("/enrollments/my")
 async def get_my_enrollments(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "student":
         raise HTTPException(status_code=403, detail="Only students can view enrollments")
@@ -1002,132 +741,21 @@ async def get_my_enrollments(current_user: dict = Depends(get_current_user)):
         courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
         courses = await courses_cursor.to_list(length=None)
         enrollment["courses"] = serialize_doc(courses)
+        
+        # Check if documents are complete
+        docs_complete = await check_user_documents_complete(current_user["id"], "student")
+        enrollment["documents_complete"] = docs_complete
     
     return serialize_doc(enrollments)
 
-# Video Calling APIs
-
-@app.post("/api/video/create-room")
-async def create_video_room(room_data: VideoRoomCreate, current_user: dict = Depends(get_current_user)):
-    """Create a video room for a course session"""
-    if current_user["role"] not in ["teacher", "manager"]:
-        raise HTTPException(status_code=403, detail="Only teachers and managers can create video rooms")
-    
-    # Verify course exists and user has access
-    course = await db.courses.find_one({"id": room_data.course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    # For teachers, verify they are assigned to this course
-    if current_user["role"] == "teacher":
-        if course["teacher_id"] != current_user["id"]:
-            raise HTTPException(status_code=403, detail="Not authorized to create room for this course")
-    
-    try:
-        # Create Daily.co room
-        room_info = await create_daily_room(room_data.room_name, room_data.properties)
-        
-        # Save room info to database
-        session_id = str(uuid.uuid4())
-        session_doc = {
-            "id": session_id,
-            "course_id": room_data.course_id,
-            "teacher_id": current_user["id"],
-            "student_id": course.get("student_id"),
-            "scheduled_time": datetime.utcnow(),
-            "duration_minutes": 60,
-            "status": "scheduled",
-            "daily_room_url": room_info["url"],
-            "daily_room_name": room_info["name"],
-            "notes": None,
-            "recording_url": None,
-            "created_at": datetime.utcnow()
-        }
-        
-        await db.course_sessions.insert_one(session_doc)
-        
-        return {
-            "session_id": session_id,
-            "room_url": room_info["url"],
-            "room_name": room_info["name"],
-            "message": "Video room created successfully"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create video room: {str(e)}")
-
-@app.get("/api/video/rooms/{course_id}")
-async def get_course_video_rooms(course_id: str, current_user: dict = Depends(get_current_user)):
-    """Get all video rooms for a course"""
-    # Verify course exists and user has access
-    course = await db.courses.find_one({"id": course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    # Get enrollment to check student access
-    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-    if not enrollment:
-        raise HTTPException(status_code=404, detail="Enrollment not found")
-    
-    # Check access rights
-    has_access = False
-    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
-        has_access = True
-    elif current_user["role"] == "teacher" and course.get("teacher_id") == current_user["id"]:
-        has_access = True
-    elif current_user["role"] == "manager":
-        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-        if school and school["manager_id"] == current_user["id"]:
-            has_access = True
-    
-    if not has_access:
-        raise HTTPException(status_code=403, detail="Not authorized to view course sessions")
-    
-    # Get course sessions
-    sessions_cursor = db.course_sessions.find({"course_id": course_id})
-    sessions = await sessions_cursor.to_list(length=None)
-    
-    return serialize_doc(sessions)
-
-@app.post("/api/video/join/{session_id}")
-async def join_video_session(session_id: str, current_user: dict = Depends(get_current_user)):
-    """Get join URL for a video session"""
-    session = await db.course_sessions.find_one({"id": session_id})
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    # Verify access
-    course = await db.courses.find_one({"id": session["course_id"]})
-    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-    
-    has_access = False
-    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
-        has_access = True
-    elif current_user["role"] == "teacher" and session["teacher_id"] == current_user["id"]:
-        has_access = True
-    elif current_user["role"] == "manager":
-        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-        if school and school["manager_id"] == current_user["id"]:
-            has_access = True
-    
-    if not has_access:
-        raise HTTPException(status_code=403, detail="Not authorized to join this session")
-    
-    return {
-        "room_url": session["daily_room_url"],
-        "room_name": session["daily_room_name"],
-        "session_id": session_id
-    }
-
 # Document Upload APIs
-
-@app.post("/api/documents/upload")
+@api_router.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
     document_type: str = Form(...),
     current_user: dict = Depends(get_current_user)
 ):
-    """Upload a document (photo, ID card, medical certificate, etc.)"""
-    
+    """Upload a document"""
     # Validate document type
     if document_type not in [dt.value for dt in DocumentType]:
         raise HTTPException(status_code=400, detail="Invalid document type")
@@ -1148,6 +776,12 @@ async def upload_document(
         # Upload to Cloudinary
         upload_result = await upload_to_cloudinary(file, folder)
         
+        # Delete existing document of same type for this user
+        await db.documents.delete_many({
+            "user_id": current_user["id"],
+            "document_type": document_type
+        })
+        
         # Save document info to database
         document_id = str(uuid.uuid4())
         document_doc = {
@@ -1164,6 +798,15 @@ async def upload_document(
         
         await db.documents.insert_one(document_doc)
         
+        # If student and all documents uploaded, update enrollment status
+        if current_user["role"] == "student":
+            docs_complete = await check_user_documents_complete(current_user["id"], "student")
+            if docs_complete:
+                await db.enrollments.update_many(
+                    {"student_id": current_user["id"], "enrollment_status": EnrollmentStatus.PENDING_DOCUMENTS},
+                    {"$set": {"enrollment_status": EnrollmentStatus.PENDING_APPROVAL}}
+                )
+        
         return {
             "document_id": document_id,
             "file_url": upload_result["file_url"],
@@ -1172,45 +815,14 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload document: {str(e)}")
 
-@app.get("/api/documents/my")
+@api_router.get("/documents/my")
 async def get_my_documents(current_user: dict = Depends(get_current_user)):
     """Get all documents for the current user"""
     documents_cursor = db.documents.find({"user_id": current_user["id"]})
     documents = await documents_cursor.to_list(length=None)
     return serialize_doc(documents)
 
-@app.get("/api/documents/{user_id}")
-async def get_user_documents(user_id: str, current_user: dict = Depends(get_current_user)):
-    """Get documents for a specific user (manager/teacher access)"""
-    if current_user["role"] not in ["manager", "teacher"]:
-        raise HTTPException(status_code=403, detail="Not authorized to view user documents")
-    
-    # For teachers, they can only view their students' documents
-    if current_user["role"] == "teacher":
-        # Check if user is student of this teacher
-        teacher = await db.teachers.find_one({"user_id": current_user["id"]})
-        if not teacher:
-            raise HTTPException(status_code=404, detail="Teacher profile not found")
-        
-        # Check if student is enrolled in teacher's school
-        enrollments_cursor = db.enrollments.find({"student_id": user_id})
-        enrollments = await enrollments_cursor.to_list(length=None)
-        
-        has_access = False
-        for enrollment in enrollments:
-            school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-            if school and school["id"] == teacher["driving_school_id"]:
-                has_access = True
-                break
-        
-        if not has_access:
-            raise HTTPException(status_code=403, detail="Not authorized to view this student's documents")
-    
-    documents_cursor = db.documents.find({"user_id": user_id})
-    documents = await documents_cursor.to_list(length=None)
-    return serialize_doc(documents)
-
-@app.post("/api/documents/{document_id}/verify")
+@api_router.post("/documents/{document_id}/verify")
 async def verify_document(document_id: str, current_user: dict = Depends(get_current_user)):
     """Verify a document (manager only)"""
     if current_user["role"] != "manager":
@@ -1228,468 +840,123 @@ async def verify_document(document_id: str, current_user: dict = Depends(get_cur
     
     return {"message": "Document verified successfully"}
 
-# Quiz Management APIs
-@app.post("/api/quizzes")
-async def create_quiz(
-    course_id: str = Form(...),
-    title: str = Form(...),
-    questions: str = Form(...),  # JSON string
-    time_limit_minutes: int = Form(30),
-    passing_score: float = Form(80.0),
-    current_user: dict = Depends(get_current_user)
-):
-    """Create a quiz for a theory course"""
-    if current_user["role"] not in ["teacher", "manager"]:
-        raise HTTPException(status_code=403, detail="Only teachers and managers can create quizzes")
-    
-    # Verify course exists and is a theory course
-    course = await db.courses.find_one({"id": course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    if course["course_type"] != CourseType.THEORY:
-        raise HTTPException(status_code=400, detail="Quizzes can only be created for theory courses")
-    
-    # Parse questions JSON
-    try:
-        questions_data = json.loads(questions)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid questions format")
-    
-    quiz_id = str(uuid.uuid4())
-    quiz_doc = {
-        "id": quiz_id,
-        "course_id": course_id,
-        "title": title,
-        "questions": questions_data,
-        "time_limit_minutes": time_limit_minutes,
-        "passing_score": passing_score,
-        "created_at": datetime.utcnow()
-    }
-    
-    await db.quizzes.insert_one(quiz_doc)
-    return {"id": quiz_id, "message": "Quiz created successfully"}
-
-@app.get("/api/quizzes/course/{course_id}")
-async def get_course_quizzes(course_id: str, current_user: dict = Depends(get_current_user)):
-    """Get all quizzes for a course"""
-    course = await db.courses.find_one({"id": course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    # Check access rights
-    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-    if not enrollment:
-        raise HTTPException(status_code=404, detail="Enrollment not found")
-    
-    has_access = False
-    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
-        has_access = True
-    elif current_user["role"] == "teacher" and course.get("teacher_id") == current_user["id"]:
-        has_access = True
-    elif current_user["role"] == "manager":
-        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-        if school and school["manager_id"] == current_user["id"]:
-            has_access = True
-    
-    if not has_access:
-        raise HTTPException(status_code=403, detail="Not authorized to view course quizzes")
-    
-    quizzes_cursor = db.quizzes.find({"course_id": course_id})
-    quizzes = await quizzes_cursor.to_list(length=None)
-    return serialize_doc(quizzes)
-
-@app.post("/api/quiz-attempts")
-async def submit_quiz_attempt(
-    quiz_id: str = Form(...),
-    answers: str = Form(...),  # JSON string
-    current_user: dict = Depends(get_current_user)
-):
-    """Submit a quiz attempt"""
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can submit quiz attempts")
-    
-    quiz = await db.quizzes.find_one({"id": quiz_id})
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    
-    # Parse answers
-    try:
-        answers_data = json.loads(answers)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid answers format")
-    
-    # Calculate score
-    total_questions = len(quiz["questions"])
-    correct_answers = 0
-    
-    for i, question in enumerate(quiz["questions"]):
-        student_answer = answers_data.get(str(i))
-        if student_answer == question.get("correct_answer"):
-            correct_answers += 1
-    
-    score = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
-    passed = score >= quiz["passing_score"]
-    
-    attempt_id = str(uuid.uuid4())
-    attempt_doc = {
-        "id": attempt_id,
-        "quiz_id": quiz_id,
-        "student_id": current_user["id"],
-        "answers": answers_data,
-        "score": score,
-        "passed": passed,
-        "completed_at": datetime.utcnow()
-    }
-    
-    await db.quiz_attempts.insert_one(attempt_doc)
-    
-    # Update course progress if passed
-    if passed:
-        course = await db.courses.find_one({"id": quiz["course_id"]})
-        if course:
-            await db.courses.update_one(
-                {"id": quiz["course_id"]},
-                {"$inc": {"completed_sessions": 1}, "$set": {"updated_at": datetime.utcnow()}}
-            )
-    
-    return {
-        "attempt_id": attempt_id,
-        "score": score,
-        "passed": passed,
-        "correct_answers": correct_answers,
-        "total_questions": total_questions
-    }
-
-@app.get("/api/quiz-attempts/my/{quiz_id}")
-async def get_my_quiz_attempts(quiz_id: str, current_user: dict = Depends(get_current_user)):
-    """Get student's attempts for a specific quiz"""
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can view their quiz attempts")
-    
-    attempts_cursor = db.quiz_attempts.find({"quiz_id": quiz_id, "student_id": current_user["id"]})
-    attempts = await attempts_cursor.to_list(length=None)
-    return serialize_doc(attempts)
-
-# Exam Management APIs
-@app.post("/api/exams/schedule")
-async def schedule_exam(
-    course_id: str = Form(...),
-    exam_date: str = Form(...),
-    exam_location: str = Form(...),
-    examiner_notes: str = Form(""),
-    current_user: dict = Depends(get_current_user)
-):
-    """Schedule an exam for a course"""
+# Enrollment Management APIs
+@api_router.get("/enrollments/pending")
+async def get_pending_enrollments(current_user: dict = Depends(get_current_user)):
+    """Get pending enrollments for manager to approve"""
     if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can schedule exams")
+        raise HTTPException(status_code=403, detail="Only managers can view pending enrollments")
     
-    course = await db.courses.find_one({"id": course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    # Verify manager has access to this course
-    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-    school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-    if not school or school["manager_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to schedule exam for this course")
-    
-    try:
-        exam_datetime = datetime.fromisoformat(exam_date)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid exam date format")
-    
-    exam_id = str(uuid.uuid4())
-    exam_doc = {
-        "id": exam_id,
-        "course_id": course_id,
-        "exam_date": exam_datetime,
-        "exam_location": exam_location,
-        "examiner_notes": examiner_notes,
-        "status": "scheduled",
-        "score": None,
-        "passed": None,
-        "examiner_feedback": "",
-        "scheduled_by": current_user["id"],
-        "created_at": datetime.utcnow()
-    }
-    
-    await db.exams.insert_one(exam_doc)
-    return {"id": exam_id, "message": "Exam scheduled successfully"}
-
-@app.post("/api/exams/{exam_id}/complete")
-async def complete_exam(
-    exam_id: str,
-    score: float = Form(...),
-    passed: bool = Form(...),
-    examiner_feedback: str = Form(""),
-    current_user: dict = Depends(get_current_user)
-):
-    """Mark an exam as completed with results"""
-    if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can complete exams")
-    
-    exam = await db.exams.find_one({"id": exam_id})
-    if not exam:
-        raise HTTPException(status_code=404, detail="Exam not found")
-    
-    # Update exam
-    await db.exams.update_one(
-        {"id": exam_id},
-        {
-            "$set": {
-                "status": "completed",
-                "score": score,
-                "passed": passed,
-                "examiner_feedback": examiner_feedback,
-                "completed_at": datetime.utcnow(),
-                "completed_by": current_user["id"]
-            }
-        }
-    )
-    
-    # Update course exam status
-    await db.courses.update_one(
-        {"id": exam["course_id"]},
-        {
-            "$set": {
-                "exam_status": ExamStatus.PASSED if passed else ExamStatus.FAILED,
-                "exam_score": score,
-                "updated_at": datetime.utcnow()
-            }
-        }
-    )
-    
-    return {"message": "Exam completed successfully"}
-
-@app.get("/api/exams/course/{course_id}")
-async def get_course_exams(course_id: str, current_user: dict = Depends(get_current_user)):
-    """Get all exams for a course"""
-    course = await db.courses.find_one({"id": course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    # Check access
-    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-    has_access = False
-    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
-        has_access = True
-    elif current_user["role"] in ["manager", "teacher"]:
-        has_access = True
-    
-    if not has_access:
-        raise HTTPException(status_code=403, detail="Not authorized to view course exams")
-    
-    exams_cursor = db.exams.find({"course_id": course_id})
-    exams = await exams_cursor.to_list(length=None)
-    return serialize_doc(exams)
-
-# Teacher Assignment APIs
-@app.post("/api/courses/{course_id}/assign-teacher")
-async def assign_teacher_to_course(
-    course_id: str,
-    teacher_id: str = Form(...),
-    current_user: dict = Depends(get_current_user)
-):
-    """Assign a teacher to a course"""
-    if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can assign teachers")
-    
-    course = await db.courses.find_one({"id": course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    teacher = await db.teachers.find_one({"id": teacher_id})
-    if not teacher:
-        raise HTTPException(status_code=404, detail="Teacher not found")
-    
-    # Verify teacher belongs to manager's school
-    school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
-    if not school or teacher["driving_school_id"] != school["id"]:
-        raise HTTPException(status_code=403, detail="Teacher does not belong to your school")
-    
-    # Check gender compatibility for non-theory courses
-    if course["course_type"] != CourseType.THEORY:
-        enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-        student = await db.users.find_one({"id": enrollment["student_id"]})
-        
-        if student["gender"] == "female" and not teacher["can_teach_female"]:
-            raise HTTPException(status_code=400, detail="This teacher cannot teach female students")
-    
-    # Update course
-    await db.courses.update_one(
-        {"id": course_id},
-        {
-            "$set": {
-                "teacher_id": teacher_id,
-                "status": CourseStatus.IN_PROGRESS,
-                "updated_at": datetime.utcnow()
-            }
-        }
-    )
-    
-    return {"message": "Teacher assigned successfully"}
-
-@app.post("/api/courses/{course_id}/auto-assign-teacher")
-async def auto_assign_teacher(course_id: str, current_user: dict = Depends(get_current_user)):
-    """Automatically assign a suitable teacher to a course"""
-    if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can assign teachers")
-    
-    course = await db.courses.find_one({"id": course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-    student = await db.users.find_one({"id": enrollment["student_id"]})
-    school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-    
-    # Find suitable teachers
-    query = {"driving_school_id": school["id"]}
-    if student["gender"] == "female":
-        query["can_teach_female"] = True
-    
-    teachers_cursor = db.teachers.find(query)
-    teachers = await teachers_cursor.to_list(length=None)
-    
-    if not teachers:
-        raise HTTPException(status_code=404, detail="No suitable teachers found")
-    
-    # Select teacher with highest rating
-    best_teacher = max(teachers, key=lambda t: t["rating"])
-    
-    # Update course
-    await db.courses.update_one(
-        {"id": course_id},
-        {
-            "$set": {
-                "teacher_id": best_teacher["id"],
-                "status": CourseStatus.IN_PROGRESS,
-                "updated_at": datetime.utcnow()
-            }
-        }
-    )
-    
-    return {
-        "message": "Teacher assigned automatically",
-        "teacher_id": best_teacher["id"]
-    }
-
-# Session Scheduling APIs
-@app.post("/api/sessions/schedule")
-async def schedule_session(session_data: CourseSessionCreate, current_user: dict = Depends(get_current_user)):
-    """Schedule a course session"""
-    if current_user["role"] not in ["teacher", "manager"]:
-        raise HTTPException(status_code=403, detail="Only teachers and managers can schedule sessions")
-    
-    course = await db.courses.find_one({"id": session_data.course_id})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-    
-    # Verify access
-    if current_user["role"] == "teacher" and course.get("teacher_id") != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to schedule sessions for this course")
-    
-    session_id = str(uuid.uuid4())
-    session_doc = {
-        "id": session_id,
-        "course_id": session_data.course_id,
-        "teacher_id": course.get("teacher_id") or current_user["id"],
-        "student_id": None,  # Will be populated from enrollment
-        "scheduled_time": session_data.scheduled_time,
-        "duration_minutes": session_data.duration_minutes,
-        "status": "scheduled",
-        "notes": None,
-        "daily_room_url": None,
-        "daily_room_name": None,
-        "recording_url": None,
-        "created_at": datetime.utcnow()
-    }
-    
-    await db.course_sessions.insert_one(session_doc)
-    return {"id": session_id, "message": "Session scheduled successfully"}
-
-@app.get("/api/sessions/my")
-async def get_my_sessions(current_user: dict = Depends(get_current_user)):
-    """Get sessions for current user"""
-    query = {}
-    if current_user["role"] == "teacher":
-        query["teacher_id"] = current_user["id"]
-    elif current_user["role"] == "student":
-        # Get student's enrollments first
-        enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
-        enrollments = await enrollments_cursor.to_list(length=None)
-        course_ids = []
-        for enrollment in enrollments:
-            courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
-            courses = await courses_cursor.to_list(length=None)
-            course_ids.extend([course["id"] for course in courses])
-        query["course_id"] = {"$in": course_ids}
-    else:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    sessions_cursor = db.course_sessions.find(query)
-    sessions = await sessions_cursor.to_list(length=None)
-    
-    # Enrich with course and enrollment data
-    for session in sessions:
-        course = await db.courses.find_one({"id": session["course_id"]})
-        if course:
-            session["course"] = serialize_doc(course)
-            enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-            if enrollment:
-                session["enrollment"] = serialize_doc(enrollment)
-    
-    return serialize_doc(sessions)
-
-# Teacher Management APIs
-@app.post("/api/teachers")
-async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can add teachers")
-    
-    # Find the manager's driving school
+    # Find manager's school
     school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
     if not school:
         raise HTTPException(status_code=404, detail="Manager's driving school not found")
     
-    teacher_id = str(uuid.uuid4())
-    teacher_doc = {
-        "id": teacher_id,
-        "user_id": current_user["id"],  # Manager can add themselves as teacher
+    # Get pending enrollments for this school
+    enrollments_cursor = db.enrollments.find({
         "driving_school_id": school["id"],
-        "driving_license_url": teacher_data.driving_license_url,
-        "teaching_license_url": teacher_data.teaching_license_url,
-        "photo_url": teacher_data.photo_url,
-        "can_teach_male": teacher_data.can_teach_male,
-        "can_teach_female": teacher_data.can_teach_female,
-        "rating": 0.0,
-        "total_reviews": 0,
-        "created_at": datetime.utcnow()
-    }
+        "enrollment_status": EnrollmentStatus.PENDING_APPROVAL
+    })
+    enrollments = await enrollments_cursor.to_list(length=None)
     
-    await db.teachers.insert_one(teacher_doc)
+    # Enrich with student data and documents
+    for enrollment in enrollments:
+        student = await db.users.find_one({"id": enrollment["student_id"]})
+        enrollment["student"] = serialize_doc(student)
+        
+        # Get student documents
+        documents_cursor = db.documents.find({"user_id": enrollment["student_id"]})
+        documents = await documents_cursor.to_list(length=None)
+        enrollment["documents"] = serialize_doc(documents)
+        
+        # Check document completion
+        docs_complete = await check_user_documents_complete(enrollment["student_id"], "student")
+        enrollment["documents_complete"] = docs_complete
     
-    # If current user is not already a teacher, assign teacher role as well
-    if current_user["role"] != "teacher":
-        await db.users.update_one(
-            {"id": current_user["id"]},
-            {"$set": {"role": "teacher"}}
-        )
-    
-    return {"id": teacher_id, "message": "Teacher added successfully"}
+    return serialize_doc(enrollments)
 
-@app.post("/api/teachers/add-by-email")
-async def add_teacher_by_email(
-    email: str = Form(...),
-    driving_license_url: str = Form(...),
-    teaching_license_url: str = Form(...),
-    photo_url: str = Form(...),
-    can_teach_male: bool = Form(True),
-    can_teach_female: bool = Form(True),
+@api_router.post("/enrollments/{enrollment_id}/approve")
+async def approve_enrollment(
+    enrollment_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Add an existing user as a teacher by their email"""
+    """Approve a student enrollment"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can approve enrollments")
+    
+    enrollment = await db.enrollments.find_one({"id": enrollment_id})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    # Verify manager owns the school
+    school = await db.driving_schools.find_one({
+        "id": enrollment["driving_school_id"],
+        "manager_id": current_user["id"]
+    })
+    if not school:
+        raise HTTPException(status_code=403, detail="Not authorized to approve this enrollment")
+    
+    # Check if student has all required documents verified
+    docs_complete = await check_user_documents_complete(enrollment["student_id"], "student")
+    if not docs_complete:
+        raise HTTPException(status_code=400, detail="Student documents are not complete or verified")
+    
+    # Update enrollment status
+    await db.enrollments.update_one(
+        {"id": enrollment_id},
+        {
+            "$set": {
+                "enrollment_status": EnrollmentStatus.APPROVED,
+                "approved_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    # Update course availability
+    await update_course_availability(enrollment_id)
+    
+    return {"message": "Enrollment approved successfully"}
+
+@api_router.post("/enrollments/{enrollment_id}/reject")
+async def reject_enrollment(
+    enrollment_id: str,
+    reason: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Reject a student enrollment"""
+    if current_user["role"] != "manager":
+        raise HTTPException(status_code=403, detail="Only managers can reject enrollments")
+    
+    enrollment = await db.enrollments.find_one({"id": enrollment_id})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    # Verify manager owns the school
+    school = await db.driving_schools.find_one({
+        "id": enrollment["driving_school_id"],
+        "manager_id": current_user["id"]
+    })
+    if not school:
+        raise HTTPException(status_code=403, detail="Not authorized to reject this enrollment")
+    
+    # Update enrollment status
+    await db.enrollments.update_one(
+        {"id": enrollment_id},
+        {
+            "$set": {
+                "enrollment_status": EnrollmentStatus.REJECTED,
+                "rejection_reason": reason,
+                "rejected_at": datetime.utcnow()
+            }
+        }
+    )
+    
+    return {"message": "Enrollment rejected"}
+
+# Teacher Management APIs
+@api_router.post("/teachers/add")
+async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(get_current_user)):
+    """Add a teacher to the driving school"""
     if current_user["role"] != "manager":
         raise HTTPException(status_code=403, detail="Only managers can add teachers")
     
@@ -1699,7 +966,7 @@ async def add_teacher_by_email(
         raise HTTPException(status_code=404, detail="Manager's driving school not found")
     
     # Find the user by email
-    user = await db.users.find_one({"email": email})
+    user = await db.users.find_one({"email": teacher_data.email})
     if not user:
         raise HTTPException(status_code=404, detail="User with this email not found")
     
@@ -1716,13 +983,14 @@ async def add_teacher_by_email(
         "id": teacher_id,
         "user_id": user["id"],
         "driving_school_id": school["id"],
-        "driving_license_url": driving_license_url,
-        "teaching_license_url": teaching_license_url,
-        "photo_url": photo_url,
-        "can_teach_male": can_teach_male,
-        "can_teach_female": can_teach_female,
+        "driving_license_url": "",  # Will be filled when documents uploaded
+        "teaching_license_url": "",
+        "photo_url": "",
+        "can_teach_male": teacher_data.can_teach_male,
+        "can_teach_female": teacher_data.can_teach_female,
         "rating": 0.0,
         "total_reviews": 0,
+        "is_approved": False,  # Manager needs to approve after documents uploaded
         "created_at": datetime.utcnow()
     }
     
@@ -1734,397 +1002,273 @@ async def add_teacher_by_email(
         {"$set": {"role": "teacher"}}
     )
     
-    return {"id": teacher_id, "message": f"Teacher {user['first_name']} {user['last_name']} added successfully"}
+    return {"id": teacher_id, "message": f"Teacher {user['first_name']} {user['last_name']} added successfully. They need to upload required documents."}
 
-# Payment Integration APIs
-@app.post("/api/payments/initiate")
-async def initiate_payment(
-    enrollment_id: str = Form(...),
-    current_user: dict = Depends(get_current_user)
-):
-    """Initiate payment for an enrollment"""
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can initiate payments")
-    
-    enrollment = await db.enrollments.find_one({"id": enrollment_id})
-    if not enrollment:
-        raise HTTPException(status_code=404, detail="Enrollment not found")
-    
-    if enrollment["student_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to pay for this enrollment")
-    
-    if enrollment["payment_status"] == PaymentStatus.COMPLETED:
-        raise HTTPException(status_code=400, detail="Payment already completed")
-    
-    # Generate transaction ID
-    transaction_id = f"DS_{enrollment_id}_{str(uuid.uuid4())[:8]}"
-    
-    # In a real implementation, you would integrate with Baridimob API here
-    # For demo purposes, we'll simulate the payment process
-    payment_doc = {
-        "id": str(uuid.uuid4()),
-        "enrollment_id": enrollment_id,
-        "transaction_id": transaction_id,
-        "amount": enrollment["amount"],
-        "status": "pending",
-        "payment_method": "baridimob",
-        "created_at": datetime.utcnow()
-    }
-    
-    await db.payments.insert_one(payment_doc)
-    
-    # In real implementation, redirect to Baridimob payment page
-    payment_url = f"https://demo-payment.baridimob.dz/pay?transaction_id={transaction_id}&amount={enrollment['amount']}"
-    
-    return {
-        "transaction_id": transaction_id,
-        "payment_url": payment_url,
-        "amount": enrollment["amount"],
-        "message": "Payment initiated successfully"
-    }
-
-@app.post("/api/payments/complete")
-async def complete_payment(
-    transaction_id: str = Form(...),
-    status: str = Form(...),  # success, failed, cancelled
-    current_user: dict = Depends(get_current_user)
-):
-    """Complete payment process (webhook endpoint for payment gateway)"""
-    payment = await db.payments.find_one({"transaction_id": transaction_id})
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    
-    # Update payment status
-    payment_status = PaymentStatus.COMPLETED if status == "success" else PaymentStatus.FAILED
-    
-    await db.payments.update_one(
-        {"transaction_id": transaction_id},
-        {
-            "$set": {
-                "status": status,
-                "completed_at": datetime.utcnow()
-            }
-        }
-    )
-    
-    # Update enrollment
-    await db.enrollments.update_one(
-        {"id": payment["enrollment_id"]},
-        {"$set": {"payment_status": payment_status}}
-    )
-    
-    return {"message": f"Payment {status}", "status": payment_status}
-
-@app.get("/api/payments/my")
-async def get_my_payments(current_user: dict = Depends(get_current_user)):
-    """Get payments for current user"""
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can view payments")
-    
-    # Get student's enrollments
-    enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
-    enrollments = await enrollments_cursor.to_list(length=None)
-    enrollment_ids = [e["id"] for e in enrollments]
-    
-    payments_cursor = db.payments.find({"enrollment_id": {"$in": enrollment_ids}})
-    payments = await payments_cursor.to_list(length=None)
-    
-    return serialize_doc(payments)
-
-# Rating and Review APIs
-@app.post("/api/reviews/school")
-async def rate_driving_school(
-    school_id: str = Form(...),
-    rating: float = Form(...),
-    comment: str = Form(""),
-    current_user: dict = Depends(get_current_user)
-):
-    """Rate and review a driving school"""
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can rate schools")
-    
-    if not (1 <= rating <= 5):
-        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
-    
-    # Check if student has completed enrollment at this school
-    enrollment = await db.enrollments.find_one({
-        "student_id": current_user["id"],
-        "driving_school_id": school_id,
-        "payment_status": PaymentStatus.COMPLETED
-    })
-    
-    if not enrollment:
-        raise HTTPException(status_code=403, detail="You must complete enrollment to rate this school")
-    
-    # Check if already reviewed
-    existing_review = await db.school_reviews.find_one({
-        "student_id": current_user["id"],
-        "school_id": school_id
-    })
-    
-    if existing_review:
-        raise HTTPException(status_code=400, detail="You have already reviewed this school")
-    
-    review_id = str(uuid.uuid4())
-    review_doc = {
-        "id": review_id,
-        "student_id": current_user["id"],
-        "school_id": school_id,
-        "rating": rating,
-        "comment": comment,
-        "created_at": datetime.utcnow()
-    }
-    
-    await db.school_reviews.insert_one(review_doc)
-    
-    # Update school rating
-    await update_school_rating(school_id)
-    
-    return {"id": review_id, "message": "Review submitted successfully"}
-
-@app.post("/api/reviews/teacher")
-async def rate_teacher(
-    teacher_id: str = Form(...),
-    rating: float = Form(...),
-    comment: str = Form(""),
-    current_user: dict = Depends(get_current_user)
-):
-    """Rate and review a teacher"""
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can rate teachers")
-    
-    if not (1 <= rating <= 5):
-        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
-    
-    # Check if student has completed a course with this teacher
-    courses_cursor = db.courses.find({"teacher_id": teacher_id, "status": CourseStatus.COMPLETED})
-    courses = await courses_cursor.to_list(length=None)
-    
-    has_completed_course = False
-    for course in courses:
-        enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-        if enrollment and enrollment["student_id"] == current_user["id"]:
-            has_completed_course = True
-            break
-    
-    if not has_completed_course:
-        raise HTTPException(status_code=403, detail="You must complete a course with this teacher to rate them")
-    
-    # Check if already reviewed
-    existing_review = await db.teacher_reviews.find_one({
-        "student_id": current_user["id"],
-        "teacher_id": teacher_id
-    })
-    
-    if existing_review:
-        raise HTTPException(status_code=400, detail="You have already reviewed this teacher")
-    
-    review_id = str(uuid.uuid4())
-    review_doc = {
-        "id": review_id,
-        "student_id": current_user["id"],
-        "teacher_id": teacher_id,
-        "rating": rating,
-        "comment": comment,
-        "created_at": datetime.utcnow()
-    }
-    
-    await db.teacher_reviews.insert_one(review_doc)
-    
-    # Update teacher rating
-    await update_teacher_rating(teacher_id)
-    
-    return {"id": review_id, "message": "Review submitted successfully"}
-
-@app.get("/api/reviews/school/{school_id}")
-async def get_school_reviews(school_id: str, limit: int = 20, skip: int = 0):
-    """Get reviews for a driving school"""
-    reviews_cursor = db.school_reviews.find({"school_id": school_id}).skip(skip).limit(limit)
-    reviews = await reviews_cursor.to_list(length=limit)
-    
-    # Enrich with student data
-    for review in reviews:
-        student = await db.users.find_one({"id": review["student_id"]})
-        if student:
-            review["student"] = {
-                "first_name": student["first_name"],
-                "last_name": student["last_name"]
-            }
-    
-    return serialize_doc(reviews)
-
-@app.get("/api/reviews/teacher/{teacher_id}")
-async def get_teacher_reviews(teacher_id: str, limit: int = 20, skip: int = 0):
-    """Get reviews for a teacher"""
-    reviews_cursor = db.teacher_reviews.find({"teacher_id": teacher_id}).skip(skip).limit(limit)
-    reviews = await reviews_cursor.to_list(length=limit)
-    
-    # Enrich with student data
-    for review in reviews:
-        student = await db.users.find_one({"id": review["student_id"]})
-        if student:
-            review["student"] = {
-                "first_name": student["first_name"],
-                "last_name": student["last_name"]
-            }
-    
-    return serialize_doc(reviews)
-
-# Helper functions for rating updates
-async def update_school_rating(school_id: str):
-    """Update school's average rating"""
-    reviews_cursor = db.school_reviews.find({"school_id": school_id})
-    reviews = await reviews_cursor.to_list(length=None)
-    
-    if reviews:
-        total_rating = sum(review["rating"] for review in reviews)
-        average_rating = total_rating / len(reviews)
-        
-        await db.driving_schools.update_one(
-            {"id": school_id},
-            {
-                "$set": {
-                    "rating": round(average_rating, 1),
-                    "total_reviews": len(reviews)
-                }
-            }
-        )
-
-async def update_teacher_rating(teacher_id: str):
-    """Update teacher's average rating"""
-    reviews_cursor = db.teacher_reviews.find({"teacher_id": teacher_id})
-    reviews = await reviews_cursor.to_list(length=None)
-    
-    if reviews:
-        total_rating = sum(review["rating"] for review in reviews)
-        average_rating = total_rating / len(reviews)
-        
-        await db.teachers.update_one(
-            {"id": teacher_id},
-            {
-                "$set": {
-                    "rating": round(average_rating, 1),
-                    "total_reviews": len(reviews)
-                }
-            }
-        )
-
-@app.get("/api/teachers/my-school")
-async def get_my_school_teachers(current_user: dict = Depends(get_current_user)):
+@api_router.get("/teachers/pending")
+async def get_pending_teachers(current_user: dict = Depends(get_current_user)):
+    """Get pending teachers for approval"""
     if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can view school teachers")
+        raise HTTPException(status_code=403, detail="Only managers can view pending teachers")
     
-    # Find the manager's driving school
+    # Find manager's school
     school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
     if not school:
         raise HTTPException(status_code=404, detail="Manager's driving school not found")
     
-    teachers_cursor = db.teachers.find({"driving_school_id": school["id"]})
+    # Get pending teachers
+    teachers_cursor = db.teachers.find({
+        "driving_school_id": school["id"],
+        "is_approved": False
+    })
     teachers = await teachers_cursor.to_list(length=None)
     
-    # Enrich with user data
+    # Enrich with user data and documents
     for teacher in teachers:
         user = await db.users.find_one({"id": teacher["user_id"]})
-        if user:
-            teacher["user"] = serialize_doc(user)
+        teacher["user"] = serialize_doc(user)
+        
+        # Get teacher documents
+        documents_cursor = db.documents.find({"user_id": teacher["user_id"]})
+        documents = await documents_cursor.to_list(length=None)
+        teacher["documents"] = serialize_doc(documents)
+        
+        # Check document completion
+        docs_complete = await check_user_documents_complete(teacher["user_id"], "teacher")
+        teacher["documents_complete"] = docs_complete
     
     return serialize_doc(teachers)
 
-# Course Management APIs
-@app.get("/api/courses/my")
-async def get_my_courses(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can view their courses")
-    
-    # Get student's enrollments
-    enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
-    enrollments = await enrollments_cursor.to_list(length=None)
-    
-    all_courses = []
-    for enrollment in enrollments:
-        courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
-        courses = await courses_cursor.to_list(length=None)
-        
-        # Enrich with school and teacher data
-        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-        for course in courses:
-            course["school"] = serialize_doc(school)
-            course["enrollment"] = serialize_doc(enrollment)
-            if course.get("teacher_id"):
-                teacher = await db.teachers.find_one({"id": course["teacher_id"]})
-                if teacher:
-                    teacher_user = await db.users.find_one({"id": teacher["user_id"]})
-                    teacher["user"] = serialize_doc(teacher_user)
-                    course["teacher"] = serialize_doc(teacher)
-        
-        all_courses.extend(courses)
-    
-    return serialize_doc(all_courses)
-
-@app.post("/api/courses/{course_id}/assign-teacher")
-async def assign_teacher_to_course(course_id: str, teacher_id: str, current_user: dict = Depends(get_current_user)):
+@api_router.post("/teachers/{teacher_id}/approve")
+async def approve_teacher(
+    teacher_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Approve a teacher"""
     if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Only managers can assign teachers")
+        raise HTTPException(status_code=403, detail="Only managers can approve teachers")
     
-    # Verify course exists and belongs to manager's school
+    teacher = await db.teachers.find_one({"id": teacher_id})
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    
+    # Verify manager owns the school
+    school = await db.driving_schools.find_one({
+        "id": teacher["driving_school_id"],
+        "manager_id": current_user["id"]
+    })
+    if not school:
+        raise HTTPException(status_code=403, detail="Not authorized to approve this teacher")
+    
+    # Check if teacher has all required documents verified
+    docs_complete = await check_user_documents_complete(teacher["user_id"], "teacher")
+    if not docs_complete:
+        raise HTTPException(status_code=400, detail="Teacher documents are not complete or verified")
+    
+    # Update teacher status
+    await db.teachers.update_one(
+        {"id": teacher_id},
+        {"$set": {"is_approved": True, "approved_at": datetime.utcnow()}}
+    )
+    
+    return {"message": "Teacher approved successfully"}
+
+# Course Management APIs
+@api_router.post("/courses/{course_id}/complete-session")
+async def complete_course_session(
+    course_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Mark a course session as completed"""
+    if current_user["role"] not in ["teacher", "manager"]:
+        raise HTTPException(status_code=403, detail="Only teachers and managers can complete sessions")
+    
     course = await db.courses.find_one({"id": course_id})
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     
-    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-    school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+    # Check if course is available and has assigned teacher
+    if course["status"] != CourseStatus.IN_PROGRESS:
+        if course["status"] == CourseStatus.LOCKED:
+            raise HTTPException(status_code=400, detail="Course is locked. Complete previous course first.")
+        elif course["status"] == CourseStatus.AVAILABLE:
+            # Start the course
+            await db.courses.update_one(
+                {"id": course_id},
+                {"$set": {"status": CourseStatus.IN_PROGRESS, "updated_at": datetime.utcnow()}}
+            )
     
-    if school["manager_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized to manage this course")
+    # Increment completed sessions
+    new_completed = course["completed_sessions"] + 1
     
-    # Verify teacher exists and belongs to this school
-    teacher = await db.teachers.find_one({"id": teacher_id, "driving_school_id": school["id"]})
-    if not teacher:
-        raise HTTPException(status_code=404, detail="Teacher not found or not part of this school")
+    # Check if course is completed
+    if new_completed >= course["total_sessions"]:
+        # Course completed, make exam available
+        await db.courses.update_one(
+            {"id": course_id},
+            {
+                "$set": {
+                    "completed_sessions": new_completed,
+                    "status": CourseStatus.COMPLETED,
+                    "exam_status": ExamStatus.AVAILABLE,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        return {"message": "Course completed! Exam is now available."}
+    else:
+        await db.courses.update_one(
+            {"id": course_id},
+            {
+                "$set": {
+                    "completed_sessions": new_completed,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        remaining = course["total_sessions"] - new_completed
+        return {"message": f"Session completed! {remaining} sessions remaining."}
+
+@api_router.post("/courses/{course_id}/take-exam")
+async def take_exam(
+    course_id: str,
+    score: float = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Take/submit exam for a course"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can take exams")
     
-    # Check gender compatibility for park and road courses
-    if course["course_type"] in [CourseType.PARK, CourseType.ROAD]:
-        student = await db.users.find_one({"id": enrollment["student_id"]})
-        if student["gender"] == "female" and not teacher["can_teach_female"]:
-            raise HTTPException(status_code=400, detail="Teacher cannot teach female students")
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
     
-    # Assign teacher
+    # Check if exam is available
+    if course["exam_status"] != ExamStatus.AVAILABLE:
+        raise HTTPException(status_code=400, detail="Exam is not available yet")
+    
+    # Determine if passed (passing score is 70%)
+    passing_score = 70.0
+    passed = score >= passing_score
+    
+    # Update course exam status
+    exam_status = ExamStatus.PASSED if passed else ExamStatus.FAILED
+    
     await db.courses.update_one(
         {"id": course_id},
         {
             "$set": {
-                "teacher_id": teacher_id,
-                "status": CourseStatus.IN_PROGRESS,
+                "exam_status": exam_status,
+                "exam_score": score,
                 "updated_at": datetime.utcnow()
             }
         }
     )
     
-    return {"message": "Teacher assigned successfully"}
+    # Update course availability for enrollment
+    await update_course_availability(course["enrollment_id"])
+    
+    if passed:
+        # Check if this was the last course
+        enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+        courses_cursor = db.courses.find({"enrollment_id": course["enrollment_id"]})
+        courses = await courses_cursor.to_list(length=None)
+        
+        all_completed = all(c["exam_status"] == ExamStatus.PASSED for c in courses)
+        
+        if all_completed:
+            # Mark enrollment as completed
+            await db.enrollments.update_one(
+                {"id": course["enrollment_id"]},
+                {"$set": {"enrollment_status": EnrollmentStatus.COMPLETED}}
+            )
+            return {
+                "message": "Congratulations! You passed the exam and completed ALL courses. You can now get your driving license!",
+                "score": score,
+                "passed": True,
+                "driving_license_earned": True
+            }
+        else:
+            return {
+                "message": "Congratulations! You passed the exam. The next course is now available.",
+                "score": score,
+                "passed": True,
+                "driving_license_earned": False
+            }
+    else:
+        return {
+            "message": f"You scored {score}%. You need {passing_score}% to pass. Please retake the course and exam.",
+            "score": score,
+            "passed": False,
+            "driving_license_earned": False
+        }
+
+@api_router.get("/courses/{course_id}")
+async def get_course_details(course_id: str, current_user: dict = Depends(get_current_user)):
+    """Get course details"""
+    course = await db.courses.find_one({"id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Get enrollment and check access
+    enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    
+    # Check access
+    has_access = False
+    if current_user["role"] == "student" and enrollment["student_id"] == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "teacher" and course.get("teacher_id") == current_user["id"]:
+        has_access = True
+    elif current_user["role"] == "manager":
+        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+        if school and school["manager_id"] == current_user["id"]:
+            has_access = True
+    
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Not authorized to view this course")
+    
+    # Enrich with enrollment and school data
+    course["enrollment"] = serialize_doc(enrollment)
+    
+    school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
+    course["school"] = serialize_doc(school)
+    
+    # Get teacher info if assigned
+    if course.get("teacher_id"):
+        teacher = await db.teachers.find_one({"id": course["teacher_id"]})
+        if teacher:
+            teacher_user = await db.users.find_one({"id": teacher["user_id"]})
+            teacher["user"] = serialize_doc(teacher_user)
+            course["teacher"] = serialize_doc(teacher)
+    
+    return serialize_doc(course)
 
 # Dashboard APIs
-@app.get("/api/dashboard/student")
+@api_router.get("/dashboard/student")
 async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
+    """Get student dashboard data"""
     if current_user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Student dashboard access only")
+        raise HTTPException(status_code=403, detail="Only students can access student dashboard")
     
-    # Get enrollments
+    # Get enrollments with detailed info
     enrollments_cursor = db.enrollments.find({"student_id": current_user["id"]})
     enrollments = await enrollments_cursor.to_list(length=None)
     
     dashboard_data = {
         "total_enrollments": len(enrollments),
-        "active_enrollments": len([e for e in enrollments if e["is_approved"]]),
+        "active_enrollments": len([e for e in enrollments if e["enrollment_status"] == EnrollmentStatus.APPROVED]),
         "pending_payments": len([e for e in enrollments if e["payment_status"] == PaymentStatus.PENDING]),
         "enrollments": []
     }
     
+    # Enrich enrollments
     for enrollment in enrollments:
         school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
         courses_cursor = db.courses.find({"enrollment_id": enrollment["id"]})
         courses = await courses_cursor.to_list(length=None)
         
-        enrollment_data = {
+        enriched_enrollment = {
             "enrollment": serialize_doc(enrollment),
             "school": serialize_doc(school),
             "courses": serialize_doc(courses),
@@ -2135,136 +1279,69 @@ async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
             }
         }
         
+        # Calculate progress
         for course in courses:
-            course_type = course["course_type"].lower()
-            enrollment_data["progress"][course_type] = {
+            course_type = course["course_type"]
+            enriched_enrollment["progress"][course_type] = {
                 "completed": course["completed_sessions"],
                 "total": course["total_sessions"]
             }
         
-        dashboard_data["enrollments"].append(enrollment_data)
+        dashboard_data["enrollments"].append(enriched_enrollment)
+    
+    # Get documents
+    documents_cursor = db.documents.find({"user_id": current_user["id"]})
+    documents = await documents_cursor.to_list(length=None)
+    dashboard_data["documents"] = serialize_doc(documents)
     
     return dashboard_data
 
-@app.get("/api/dashboard/manager")
+@api_router.get("/dashboard/manager")
 async def get_manager_dashboard(current_user: dict = Depends(get_current_user)):
+    """Get manager dashboard data"""
     if current_user["role"] != "manager":
-        raise HTTPException(status_code=403, detail="Manager dashboard access only")
+        raise HTTPException(status_code=403, detail="Only managers can access manager dashboard")
     
-    # Get manager's school
+    # Find manager's school
     school = await db.driving_schools.find_one({"manager_id": current_user["id"]})
     if not school:
-        return {"message": "No driving school found. Please create one first."}
+        return {"message": "No driving school found. Please create a driving school first."}
     
-    # Get enrollments for this school
-    enrollments_cursor = db.enrollments.find({"driving_school_id": school["id"]})
-    enrollments = await enrollments_cursor.to_list(length=None)
+    # Get statistics
+    total_students = await db.enrollments.count_documents({"driving_school_id": school["id"]})
+    active_students = await db.enrollments.count_documents({
+        "driving_school_id": school["id"],
+        "enrollment_status": EnrollmentStatus.APPROVED
+    })
+    pending_approvals = await db.enrollments.count_documents({
+        "driving_school_id": school["id"],
+        "enrollment_status": EnrollmentStatus.PENDING_APPROVAL
+    })
     
     # Get teachers
     teachers_cursor = db.teachers.find({"driving_school_id": school["id"]})
     teachers = await teachers_cursor.to_list(length=None)
     
-    # Get courses
-    enrollment_ids = [e["id"] for e in enrollments]
-    courses_cursor = db.courses.find({"enrollment_id": {"$in": enrollment_ids}})
-    courses = await courses_cursor.to_list(length=None)
+    # Enrich teachers with user data
+    for teacher in teachers:
+        user = await db.users.find_one({"id": teacher["user_id"]})
+        teacher["user"] = serialize_doc(user)
+        
+        # Get documents
+        documents_cursor = db.documents.find({"user_id": teacher["user_id"]})
+        documents = await documents_cursor.to_list(length=None)
+        teacher["documents"] = serialize_doc(documents)
     
-    dashboard_data = {
+    return {
         "school": serialize_doc(school),
-        "total_students": len(enrollments),
-        "active_students": len([e for e in enrollments if e["is_approved"]]),
-        "pending_approvals": len([e for e in enrollments if not e["is_approved"]]),
+        "total_students": total_students,
+        "active_students": active_students,
+        "pending_approvals": pending_approvals,
         "total_teachers": len(teachers),
-        "courses_summary": {
-            "theory": len([c for c in courses if c["course_type"] == CourseType.THEORY]),
-            "park": len([c for c in courses if c["course_type"] == CourseType.PARK]),
-            "road": len([c for c in courses if c["course_type"] == CourseType.ROAD])
-        },
-        "recent_enrollments": serialize_doc(enrollments[-5:]),  # Last 5 enrollments
         "teachers": serialize_doc(teachers)
     }
-    
-    return dashboard_data
 
-@app.get("/api/dashboard/teacher")
-async def get_teacher_dashboard(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "teacher":
-        raise HTTPException(status_code=403, detail="Teacher dashboard access only")
-    
-    # Get teacher record
-    teacher = await db.teachers.find_one({"user_id": current_user["id"]})
-    if not teacher:
-        return {"message": "Teacher profile not found. Please contact your school manager."}
-    
-    # Get assigned courses
-    courses_cursor = db.courses.find({"teacher_id": teacher["id"]})
-    courses = await courses_cursor.to_list(length=None)
-    
-    # Enrich with student and school data
-    for course in courses:
-        enrollment = await db.enrollments.find_one({"id": course["enrollment_id"]})
-        student = await db.users.find_one({"id": enrollment["student_id"]})
-        school = await db.driving_schools.find_one({"id": enrollment["driving_school_id"]})
-        
-        course["student"] = serialize_doc(student)
-        course["school"] = serialize_doc(school)
-        course["enrollment"] = serialize_doc(enrollment)
-    
-    dashboard_data = {
-        "teacher": serialize_doc(teacher),
-        "assigned_courses": len(courses),
-        "active_courses": len([c for c in courses if c["status"] == CourseStatus.IN_PROGRESS]),
-        "completed_courses": len([c for c in courses if c["status"] == CourseStatus.COMPLETED]),
-        "courses": serialize_doc(courses)
-    }
-    
-    return dashboard_data
-
-# Payment endpoints (existing)
-@app.post("/api/payments/baridimob/initiate")
-async def initiate_baridimob_payment(enrollment_id: str, current_user: dict = Depends(get_current_user)):
-    # Get enrollment
-    enrollment = await db.enrollments.find_one({"id": enrollment_id})
-    if not enrollment:
-        raise HTTPException(status_code=404, detail="Enrollment not found")
-    
-    if enrollment["student_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    if enrollment["payment_status"] == PaymentStatus.COMPLETED:
-        raise HTTPException(status_code=400, detail="Payment already completed")
-    
-    # TODO: Integrate with Baridimob API
-    payment_data = {
-        "payment_url": f"https://baridimob.payment.gateway.dz/pay/{enrollment_id}",
-        "transaction_id": str(uuid.uuid4()),
-        "amount": enrollment["amount"],
-        "enrollment_id": enrollment_id,
-        "message": "Redirect user to payment_url to complete payment"
-    }
-    
-    return payment_data
-
-@app.post("/api/payments/baridimob/callback")
-async def baridimob_payment_callback(transaction_id: str, status: str, enrollment_id: str):
-    enrollment = await db.enrollments.find_one({"id": enrollment_id})
-    if not enrollment:
-        raise HTTPException(status_code=404, detail="Enrollment not found")
-    
-    if status == "success":
-        await db.enrollments.update_one(
-            {"id": enrollment_id},
-            {"$set": {"payment_status": PaymentStatus.COMPLETED}}
-        )
-        return {"message": "Payment confirmed successfully"}
-    else:
-        await db.enrollments.update_one(
-            {"id": enrollment_id},
-            {"$set": {"payment_status": PaymentStatus.FAILED}}
-        )
-        return {"message": "Payment failed"}
-
-# Include API router after all endpoints are defined
+# Include API router
 app.include_router(api_router)
 
 if __name__ == "__main__":
