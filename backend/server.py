@@ -500,6 +500,7 @@ async def register_user(
         
         # Return user data (exclude password hash)
         user_response = {k: v for k, v in user_data.items() if k != "password_hash"}
+        user_response = serialize_doc(user_response)
         
         return {
             "access_token": access_token,
