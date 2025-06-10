@@ -727,12 +727,32 @@ def test_manager_workflow(tester):
     if tester.created_school_id:
         tester.test_get_driving_school_details(tester.created_school_id)
     
-    # 5. Get manager dashboard again (should now have school data)
-    tester.test_get_dashboard_data("manager")
+    # 5. Add a teacher to the school
+    teacher_email = f"teacher{tester.test_timestamp}@example.com"
+    success, teacher_data = tester.test_add_teacher(teacher_email)
     
-    # 6. Test document verification if we have a document ID
+    # 6. Get pending teachers
+    success, pending_teachers = tester.test_get_pending_teachers()
+    
+    # 7. Get pending enrollments
+    success, pending_enrollments = tester.test_get_pending_enrollments()
+    
+    # 8. Approve a teacher if any are pending
+    if pending_teachers and len(pending_teachers) > 0:
+        teacher_id = pending_teachers[0]['id']
+        tester.test_approve_teacher(teacher_id)
+    
+    # 9. Approve an enrollment if any are pending
+    if pending_enrollments and len(pending_enrollments) > 0:
+        enrollment_id = pending_enrollments[0]['id']
+        tester.test_approve_enrollment(enrollment_id)
+    
+    # 10. Test document verification if we have a document ID
     if tester.document_id:
         tester.test_verify_document(tester.document_id)
+    
+    # 11. Get manager dashboard again (should now have updated data)
+    tester.test_get_dashboard_data("manager")
     
     print("✅ Manager workflow completed successfully")
     return True
