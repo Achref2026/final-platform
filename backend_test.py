@@ -769,22 +769,29 @@ def test_student_workflow(tester):
     # 5. Get student enrollments
     success, enrollments = tester.test_get_student_enrollments()
     
-    # 6. Get student courses
+    # 6. Complete payment (if enrollment was successful)
+    if tester.enrollment_id:
+        tester.test_complete_payment(tester.enrollment_id)
+    
+    # 7. Upload required documents
+    for doc_type in ["profile_photo", "id_card", "medical_certificate"]:
+        tester.test_upload_document(doc_type)
+        time.sleep(1)  # Add a small delay between uploads
+    
+    # 8. Get student documents
+    tester.test_get_my_documents()
+    
+    # 9. Get student enrollments again (should now show pending approval)
+    tester.test_get_student_enrollments()
+    
+    # 10. Get student courses
     success, courses = tester.test_get_student_courses()
     if success and courses:
-        # Store a course ID for video API testing
+        # Store a course ID for later testing
         tester.course_id = courses[0]['id']
     
-    # 7. Get student dashboard again (should now have enrollment data)
+    # 11. Get student dashboard again (should now have enrollment data)
     tester.test_get_dashboard_data("student")
-    
-    # 8. Initiate payment (if enrollment was successful)
-    if tester.enrollment_id:
-        tester.test_payment_initiation(tester.enrollment_id)
-    
-    # 9. Test document upload API
-    tester.test_upload_document("profile_photo")
-    tester.test_get_my_documents()
     
     print("✅ Student workflow completed successfully")
     return True
