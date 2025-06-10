@@ -238,20 +238,231 @@ class AlgerianDrivingSchoolTester:
             print(f"❌ Failed to retrieve {role} dashboard data")
             return False, {}
     
-    def test_payment_initiation(self, enrollment_id):
-        """Test initiating a payment for an enrollment"""
+    def test_complete_payment(self, enrollment_id):
+        """Test completing a payment for an enrollment"""
+        form_data = {'enrollment_id': enrollment_id}
+        
+        # Set up headers without Content-Type (will be set by requests for form data)
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing Complete Payment for Enrollment (ID: {enrollment_id})...")
+        
+        try:
+            url = f"{self.base_url}/api/payments/complete"
+            response = requests.post(
+                url,
+                data=form_data,
+                headers=headers
+            )
+            
+            print(f"URL: {url}")
+            print(f"Status Code: {response.status_code}")
+            
+            try:
+                response_data = response.json()
+                print(f"Response: {json.dumps(response_data, indent=2)}")
+            except:
+                print(f"Response: {response.text}")
+            
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                return True, response_data
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
+            
+    def test_complete_course_session(self, course_id):
+        """Test completing a course session"""
         success, response = self.run_test(
-            f"Initiate Payment for Enrollment (ID: {enrollment_id})",
+            f"Complete Course Session (ID: {course_id})",
             "POST",
-            f"payments/baridimob/initiate?enrollment_id={enrollment_id}",
+            f"courses/{course_id}/complete-session",
             200
         )
         
-        if success and 'payment_url' in response:
-            print(f"✅ Payment initiation successful with transaction ID: {response['transaction_id']}")
+        if success:
+            print(f"✅ Course session completed successfully")
             return True, response
         else:
-            print("❌ Failed to initiate payment")
+            print("❌ Failed to complete course session")
+            return False, {}
+            
+    def test_take_exam(self, course_id, score=75):
+        """Test taking an exam for a course"""
+        # Set up headers without Content-Type (will be set by requests for form data)
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing Take Exam for Course (ID: {course_id})...")
+        
+        try:
+            url = f"{self.base_url}/api/courses/{course_id}/take-exam"
+            form_data = {'score': score}
+            response = requests.post(
+                url,
+                data=form_data,
+                headers=headers
+            )
+            
+            print(f"URL: {url}")
+            print(f"Status Code: {response.status_code}")
+            
+            try:
+                response_data = response.json()
+                print(f"Response: {json.dumps(response_data, indent=2)}")
+            except:
+                print(f"Response: {response.text}")
+            
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                return True, response_data
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
+            
+    def test_add_teacher(self, email, can_teach_male=True, can_teach_female=True):
+        """Test adding a teacher to a driving school"""
+        teacher_data = {
+            "email": email,
+            "can_teach_male": can_teach_male,
+            "can_teach_female": can_teach_female
+        }
+        
+        success, response = self.run_test(
+            f"Add Teacher (Email: {email})",
+            "POST",
+            "teachers/add",
+            200,
+            data=teacher_data
+        )
+        
+        if success and 'id' in response:
+            print(f"✅ Teacher added successfully with ID: {response['id']}")
+            return True, response
+        else:
+            print("❌ Failed to add teacher")
+            return False, {}
+            
+    def test_get_pending_teachers(self):
+        """Test getting pending teachers for approval"""
+        success, response = self.run_test(
+            "Get Pending Teachers",
+            "GET",
+            "teachers/pending",
+            200
+        )
+        
+        if success:
+            print(f"✅ Retrieved {len(response)} pending teachers")
+            return True, response
+        else:
+            print("❌ Failed to retrieve pending teachers")
+            return False, []
+            
+    def test_approve_teacher(self, teacher_id):
+        """Test approving a teacher"""
+        success, response = self.run_test(
+            f"Approve Teacher (ID: {teacher_id})",
+            "POST",
+            f"teachers/{teacher_id}/approve",
+            200
+        )
+        
+        if success:
+            print(f"✅ Teacher approved successfully")
+            return True
+        else:
+            print("❌ Failed to approve teacher")
+            return False
+            
+    def test_get_pending_enrollments(self):
+        """Test getting pending enrollments for approval"""
+        success, response = self.run_test(
+            "Get Pending Enrollments",
+            "GET",
+            "enrollments/pending",
+            200
+        )
+        
+        if success:
+            print(f"✅ Retrieved {len(response)} pending enrollments")
+            return True, response
+        else:
+            print("❌ Failed to retrieve pending enrollments")
+            return False, []
+            
+    def test_approve_enrollment(self, enrollment_id):
+        """Test approving an enrollment"""
+        success, response = self.run_test(
+            f"Approve Enrollment (ID: {enrollment_id})",
+            "POST",
+            f"enrollments/{enrollment_id}/approve",
+            200
+        )
+        
+        if success:
+            print(f"✅ Enrollment approved successfully")
+            return True
+        else:
+            print("❌ Failed to approve enrollment")
+            return False
+            
+    def test_reject_enrollment(self, enrollment_id, reason="Test rejection"):
+        """Test rejecting an enrollment"""
+        # Set up headers without Content-Type (will be set by requests for form data)
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing Reject Enrollment (ID: {enrollment_id})...")
+        
+        try:
+            url = f"{self.base_url}/api/enrollments/{enrollment_id}/reject"
+            form_data = {'reason': reason}
+            response = requests.post(
+                url,
+                data=form_data,
+                headers=headers
+            )
+            
+            print(f"URL: {url}")
+            print(f"Status Code: {response.status_code}")
+            
+            try:
+                response_data = response.json()
+                print(f"Response: {json.dumps(response_data, indent=2)}")
+            except:
+                print(f"Response: {response.text}")
+            
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                return True, response_data
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
             return False, {}
             
     def test_create_video_room(self, course_id):
