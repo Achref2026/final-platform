@@ -266,6 +266,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def serialize_doc(doc):
     """Convert MongoDB document to JSON serializable format"""
+    from bson import ObjectId
+    from datetime import datetime
+    
     if doc is None:
         return None
     if isinstance(doc, list):
@@ -277,6 +280,10 @@ def serialize_doc(doc):
                 continue  # Skip MongoDB _id field
             result[key] = serialize_doc(value)
         return result
+    if isinstance(doc, ObjectId):
+        return str(doc)  # Convert ObjectId to string
+    if isinstance(doc, datetime):
+        return doc.isoformat()  # Convert datetime to ISO string
     return doc
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
