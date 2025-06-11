@@ -214,8 +214,13 @@ function App() {
     phone: '',
     address: '',
     date_of_birth: '',
-    gender: 'male'
+    gender: 'male',
+    state: ''
   });
+
+  // Error handling state
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Teacher management state
   const [teacherForm, setTeacherForm] = useState({
