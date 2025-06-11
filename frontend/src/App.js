@@ -1109,15 +1109,14 @@ function App() {
               >
                 🔍 {t.findPerfectSchool}
               </button>
-              {user && user.role === 'manager' && (
-                <button
-                  onClick={() => setCurrentPage('register-school')}
-                  className="hero-button hero-button-secondary"
-                >
-                  🏫 {t.registerSchool}
-                </button>
-              )}
-              {user && (
+              {/* Register School button for all users */}
+              <button
+                onClick={() => setCurrentPage('register-school')}
+                className="hero-button hero-button-secondary"
+              >
+                🏫 {t.registerSchool}
+              </button>
+              {user && user.role !== 'guest' && (
                 <button
                   onClick={() => {
                     setCurrentPage('dashboard');
