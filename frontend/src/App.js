@@ -2008,6 +2008,43 @@ function App() {
 
   return (
     <div className="App">
+      {/* Global Error/Success Notifications */}
+      {globalError && (
+        <div className="fixed top-4 right-4 z-50 bg-red-50 border border-red-200 rounded-lg p-4 shadow-lg max-w-md">
+          <div className="flex items-center">
+            <div className="text-red-600 mr-3 text-xl">⚠️</div>
+            <div>
+              <div className="text-red-800 font-medium">Error</div>
+              <div className="text-red-700 text-sm">{globalError}</div>
+            </div>
+            <button
+              onClick={() => setGlobalError('')}
+              className="ml-4 text-red-400 hover:text-red-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {successMessage && !showAuthModal && (
+        <div className="fixed top-4 right-4 z-50 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg max-w-md">
+          <div className="flex items-center">
+            <div className="text-green-600 mr-3 text-xl">✅</div>
+            <div>
+              <div className="text-green-800 font-medium">Success</div>
+              <div className="text-green-700 text-sm">{successMessage}</div>
+            </div>
+            <button
+              onClick={() => setSuccessMessage('')}
+              className="ml-4 text-green-400 hover:text-green-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {renderCurrentPage()}
 
       {/* Auth Modal */}
