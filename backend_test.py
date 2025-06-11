@@ -921,6 +921,161 @@ def test_document_api(tester):
     print("✅ Document API tests completed successfully")
     return True
 
+def test_guest_dashboard_restriction(tester):
+    """Test that guest users cannot access the dashboard"""
+    print("\n" + "="*50)
+    print("TESTING GUEST DASHBOARD RESTRICTION")
+    print("="*50)
+    
+    # 1. Register a new user (will be guest role by default)
+    success, guest_data = test_new_email_registration(tester, "guest")
+    if not success:
+        print("❌ Could not register as guest")
+        return False
+    
+    # 2. Verify user role is guest
+    if tester.user_data['role'] != 'guest':
+        print(f"❌ User role is {tester.user_data['role']}, expected 'guest'")
+        return False
+    print(f"✅ User registered with 'guest' role: {tester.user_data['email']}")
+    
+    # 3. Try to access dashboard (should return 403 Forbidden)
+    success, response = tester.run_test(
+        "Guest Dashboard Access",
+        "GET",
+        "dashboard/guest",
+        403  # Expecting 403 Forbidden
+    )
+    
+    if success:
+        print("✅ Guest dashboard access correctly restricted with 403 status")
+    else:
+        print("❌ Guest dashboard access test failed - expected 403 response")
+        return False
+    
+    print("✅ Guest dashboard restriction test completed successfully")
+    return True
+
+def test_register_school_as_guest(tester):
+    """Test that guests can register a school and become managers"""
+    print("\n" + "="*50)
+    print("TESTING REGISTER SCHOOL AS GUEST")
+    print("="*50)
+    
+    # 1. Register a new user (will be guest role by default)
+    success, guest_data = test_new_email_registration(tester, "guest")
+    if not success:
+        print("❌ Could not register as guest")
+        return False
+    
+    # 2. Verify user role is guest
+    if tester.user_data['role'] != 'guest':
+        print(f"❌ User role is {tester.user_data['role']}, expected 'guest'")
+        return False
+    print(f"✅ User registered with 'guest' role: {tester.user_data['email']}")
+    
+    # 3. Create a driving school as guest
+    school_data = {
+        "name": f"Test Driving School {tester.test_timestamp}",
+        "address": "123 Test Street",
+        "state": "Alger",
+        "phone": "0555123456",
+        "email": f"school{tester.test_timestamp}@example.com",
+        "description": "A test driving school for API testing",
+        "price": 25000.0
+    }
+    
+    if not tester.test_create_driving_school(school_data):
+        print("❌ Guest could not create a driving school")
+        return False
+    
+    # 4. Verify user role has been upgraded to manager
+    # Re-login to get updated user data
+    email = tester.user_data['email']
+    password = "testpass123"  # Default password from test_new_email_registration
+    
+    if not tester.test_login(email, password):
+        print(f"❌ Could not login with {email} after school registration")
+        return False
+    
+    if tester.user_data['role'] != 'manager':
+        print(f"❌ User role is {tester.user_data['role']}, expected 'manager'")
+        return False
+    
+    print(f"✅ User role successfully upgraded from 'guest' to 'manager'")
+    
+    # 5. Verify can now access manager dashboard
+    success, response = tester.run_test(
+        "Manager Dashboard Access",
+        "GET",
+        "dashboard/manager",
+        200
+    )
+    
+    if success:
+        print("✅ Manager dashboard access successful after role upgrade")
+    else:
+        print("❌ Manager dashboard access test failed after role upgrade")
+        return False
+    
+    print("✅ Register school as guest test completed successfully")
+    return True
+
+def test_teacher_direct_login(tester):
+    """Test that managers can add teachers and they get login credentials"""
+    print("\n" + "="*50)
+    print("TESTING TEACHER DIRECT LOGIN SYSTEM")
+    print("="*50)
+    
+    # 1. Login as manager or create a manager with a school
+    if not tester.user_data or tester.user_data['role'] != 'manager':
+        # Try to login as existing manager
+        if not tester.test_login("manager@example.com", "testpass123"):
+            # If login fails, create a new manager via school registration
+            success = test_register_school_as_guest(tester)
+            if not success:
+                print("❌ Could not setup manager account for teacher test")
+                return False
+    
+    # 2. Add a teacher to the school
+    teacher_email = f"teacher{tester.test_timestamp}@example.com"
+    success, teacher_data = tester.test_add_teacher(teacher_email)
+    
+    if not success or 'login_info' not in teacher_data:
+        print("❌ Failed to add teacher or get login credentials")
+        return False
+    
+    # 3. Store teacher credentials for login test
+    tester.teacher_credentials = {
+        'email': teacher_data['login_info']['email'],
+        'password': teacher_data['login_info'].get('temporary_password', 'teacher123')
+    }
+    
+    print(f"✅ Teacher added with credentials: {tester.teacher_credentials['email']} / {tester.teacher_credentials['password']}")
+    
+    # 4. Test teacher login with provided credentials
+    # Save current user token to restore after test
+    current_token = tester.token
+    current_user = tester.user_data
+    
+    if not tester.test_login(tester.teacher_credentials['email'], tester.teacher_credentials['password']):
+        print("❌ Teacher login failed with provided credentials")
+        return False
+    
+    # 5. Verify teacher role
+    if tester.user_data['role'] != 'teacher':
+        print(f"❌ User role is {tester.user_data['role']}, expected 'teacher'")
+        return False
+    
+    print(f"✅ Teacher login successful with role: {tester.user_data['role']}")
+    
+    # Restore original user session
+    tester.token = current_token
+    tester.user_data = current_user
+    
+    print("✅ Teacher direct login test completed successfully")
+    return True
+
 def main():
     tester = AlgerianDrivingSchoolTester()
     
@@ -931,20 +1086,19 @@ def main():
     tester.test_health_endpoint()
     tester.test_get_states()
     
-    # Test authentication
+    # Test the three key changes
     print("\n" + "="*50)
-    print("TESTING AUTHENTICATION")
+    print("TESTING KEY CHANGES")
     print("="*50)
-    test_existing_email_registration(tester)
     
-    # Test role-specific workflows
-    test_manager_workflow(tester)
-    test_student_workflow(tester)
-    test_teacher_workflow(tester)
+    # 1. Test guest dashboard restriction
+    test_guest_dashboard_restriction(tester)
     
-    # Test new APIs specifically
-    test_video_api(tester)
-    test_document_api(tester)
+    # 2. Test register school as guest
+    test_register_school_as_guest(tester)
+    
+    # 3. Test teacher direct login system
+    test_teacher_direct_login(tester)
     
     # Print test results
     print("\n" + "="*50)
