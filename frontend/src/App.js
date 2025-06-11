@@ -485,10 +485,13 @@ function App() {
         : `${BACKEND_URL}/api/driving-schools`;
       
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch driving schools: ${response.status}`);
+      }
       const data = await response.json();
       setDrivingSchools(data.schools || []);
     } catch (error) {
-      console.error('Error fetching driving schools:', error);
+      handleApiError(error, 'Failed to load driving schools. Please try again.');
       setDrivingSchools([]);
     } finally {
       setLoading(false);
