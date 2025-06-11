@@ -985,7 +985,7 @@ function App() {
               >
                 🔍 {t.findSchools}
               </button>
-              {user && (
+              {user && user.role !== 'guest' && (
                 <button
                   onClick={() => {
                     setCurrentPage('dashboard');
