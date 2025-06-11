@@ -500,7 +500,7 @@ function App() {
 
   const handleEnroll = async (schoolId) => {
     if (!user) {
-      alert('Please login to enroll in a driving school');
+      setErrorMessage('Please login to enroll in a driving school');
       setShowAuthModal(true);
       return;
     }
@@ -521,15 +521,14 @@ function App() {
       const data = await response.json();
       
       if (response.ok) {
-        alert('Enrollment successful! Please proceed with payment and upload required documents.');
+        showSuccess('Enrollment successful! Please proceed with payment and upload required documents.');
         setCurrentPage('dashboard');
         fetchDashboardData();
       } else {
-        alert(data.detail || 'Enrollment failed');
+        throw new Error(data.detail || 'Enrollment failed');
       }
     } catch (error) {
-      console.error('Enrollment error:', error);
-      alert('Enrollment failed - Network error');
+      handleApiError(error, 'Failed to enroll in driving school');
     }
   };
 
