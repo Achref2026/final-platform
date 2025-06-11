@@ -1008,6 +1008,18 @@ function App() {
                   🏫 {t.registerSchool}
                 </button>
               )}
+              {/* Register School button for all users in mobile */}
+              {(!user || user.role === 'guest') && (
+                <button
+                  onClick={() => {
+                    setCurrentPage('register-school');
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`mobile-nav-button ${currentPage === 'register-school' ? 'mobile-nav-button-active' : ''}`}
+                >
+                  🏫 {t.registerSchool}
+                </button>
+              )}
               
               {user ? (
                 <div className="pt-4 border-t border-gray-200">
