@@ -895,6 +895,15 @@ function App() {
                 🏫 {t.registerSchool}
               </button>
             )}
+            {/* Register School button for all users */}
+            {(!user || user.role === 'guest') && (
+              <button
+                onClick={() => setCurrentPage('register-school')}
+                className={`nav-button ${currentPage === 'register-school' ? 'nav-button-active' : ''}`}
+              >
+                🏫 {t.registerSchool}
+              </button>
+            )}
             {renderLanguageSelector()}
             {user ? (
               <div className="flex items-center space-x-4">
