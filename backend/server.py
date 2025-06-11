@@ -973,19 +973,49 @@ async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(
     if not school:
         raise HTTPException(status_code=404, detail="Manager's driving school not found")
     
-    # Find the user by email
-    user = await db.users.find_one({"email": teacher_data.email})
-    if not user:
-        raise HTTPException(status_code=404, detail="User with this email not found")
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": teacher_data.email})
     
-    # Check if user is already a teacher at this school
-    existing_teacher = await db.teachers.find_one({
-        "user_id": user["id"],
-        "driving_school_id": school["id"]
-    })
-    if existing_teacher:
-        raise HTTPException(status_code=400, detail="User is already a teacher at this school")
+    if existing_user:
+        # User exists - check if already a teacher at this school
+        existing_teacher = await db.teachers.find_one({
+            "user_id": existing_user["id"],
+            "driving_school_id": school["id"]
+        })
+        if existing_teacher:
+            raise HTTPException(status_code=400, detail="User is already a teacher at this school")
+        
+        # Add existing user as teacher
+        user = existing_user
+    else:
+        # Create new user account for teacher with default password
+        default_password = "teacher123"  # Simple default password
+        password_hash = pwd_context.hash(default_password)
+        
+        user_id = str(uuid.uuid4())
+        user_data = {
+            "id": user_id,
+            "email": teacher_data.email,
+            "password_hash": password_hash,
+            "first_name": "Teacher",  # Default name - to be updated
+            "last_name": "User",
+            "phone": "",
+            "address": "",
+            "date_of_birth": datetime(1990, 1, 1),  # Default DOB
+            "gender": "male",  # Default gender
+            "role": "teacher",
+            "state": school["state"],  # Use school's state
+            "profile_photo_url": None,
+            "created_at": datetime.utcnow(),
+            "is_active": True,
+            "created_by_manager": True,  # Flag to indicate teacher was added by manager
+            "temp_password": default_password  # Store temp password for manager to share
+        }
+        
+        await db.users.insert_one(user_data)
+        user = user_data
     
+    # Create teacher record
     teacher_id = str(uuid.uuid4())
     teacher_doc = {
         "id": teacher_id,
@@ -1004,13 +1034,31 @@ async def add_teacher(teacher_data: TeacherCreate, current_user: dict = Depends(
     
     await db.teachers.insert_one(teacher_doc)
     
-    # Assign teacher role to the user
+    # Assign teacher role to the user (in case of existing user)
     await db.users.update_one(
         {"id": user["id"]},
         {"$set": {"role": "teacher"}}
     )
     
-    return {"id": teacher_id, "message": f"Teacher {user['first_name']} {user['last_name']} added successfully. They need to upload required documents."}
+    if existing_user:
+        return {
+            "id": teacher_id, 
+            "message": f"Existing user {user['first_name']} {user['last_name']} added as teacher successfully. They can login with their existing credentials.",
+            "login_info": {
+                "email": user["email"],
+                "message": "User can login with existing password"
+            }
+        }
+    else:
+        return {
+            "id": teacher_id, 
+            "message": f"New teacher account created successfully. They can login immediately.",
+            "login_info": {
+                "email": teacher_data.email,
+                "temporary_password": default_password,
+                "message": "Share these credentials with the teacher. They should update their profile after first login."
+            }
+        }
 
 @api_router.get("/teachers/pending")
 async def get_pending_teachers(current_user: dict = Depends(get_current_user)):
