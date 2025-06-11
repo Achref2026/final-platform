@@ -2099,6 +2099,21 @@ function App() {
                       </select>
                     </div>
                   </div>
+                  
+                  <div className="form-group">
+                    <label className="form-label">State (Wilaya)</label>
+                    <select
+                      required
+                      value={authData.state}
+                      onChange={(e) => setAuthData({...authData, state: e.target.value})}
+                      className="select-modern"
+                    >
+                      <option value="">Select a state...</option>
+                      {states.map((state) => (
+                        <option key={state} value={state}>{state}</option>
+                      ))}
+                    </select>
+                  </div>
                 </>
               )}
               
