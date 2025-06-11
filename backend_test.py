@@ -10,7 +10,7 @@ import os
 from io import BytesIO
 
 class AlgerianDrivingSchoolTester:
-    def __init__(self, base_url="https://88e24847-21a1-4ad1-8a28-baf9a55d65c9.preview.emergentagent.com"):
+    def __init__(self, base_url="https://88e24847-21a1-4ad1-8a28-baf9a55d65c9.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
