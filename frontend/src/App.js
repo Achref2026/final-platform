@@ -1258,6 +1258,72 @@ function App() {
   const renderDashboard = () => {
     if (!user) return null;
 
+    // Show special message for guest users
+    if (user.role === 'guest') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+          {renderNavigation()}
+          
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            <div className="text-center">
+              <div className="bg-white rounded-2xl shadow-xl p-12 border border-gray-100">
+                <div className="text-8xl mb-6">👋</div>
+                <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+                  Welcome to DrivingDZ!
+                </h1>
+                <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+                  You're currently registered as a guest. To access your personalized dashboard, 
+                  you need to take action by either enrolling in a driving school or registering your own school.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                    <div className="text-4xl mb-4">🎓</div>
+                    <h3 className="text-xl font-bold text-blue-900 mb-3">Become a Student</h3>
+                    <p className="text-blue-700 text-sm mb-4">
+                      Find and enroll in a driving school to start your learning journey
+                    </p>
+                    <button
+                      onClick={() => {
+                        setCurrentPage('find-schools');
+                        fetchDrivingSchools();
+                      }}
+                      className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-200"
+                    >
+                      🔍 Find Driving Schools
+                    </button>
+                  </div>
+                  
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+                    <div className="text-4xl mb-4">🏫</div>
+                    <h3 className="text-xl font-bold text-green-900 mb-3">Register Your School</h3>
+                    <p className="text-green-700 text-sm mb-4">
+                      Own a driving school? Register it and become a manager
+                    </p>
+                    <button
+                      onClick={() => setCurrentPage('register-school')}
+                      className="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-green-700 transition-all duration-200"
+                    >
+                      🏫 Register School
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-center justify-center text-yellow-800">
+                    <div className="text-xl mr-2">💡</div>
+                    <p className="text-sm">
+                      Once you enroll in a school or register your own, you'll get full access to your personalized dashboard!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
         {renderNavigation()}
