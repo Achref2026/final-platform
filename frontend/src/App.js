@@ -221,6 +221,27 @@ function App() {
   // Error handling state
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [globalError, setGlobalError] = useState('');
+
+  // Global error handler function
+  const handleApiError = (error, customMessage = '') => {
+    console.error('API Error:', error);
+    let errorMsg = customMessage || 'An error occurred. Please try again.';
+    
+    if (error.message) {
+      errorMsg = error.message;
+    }
+    
+    setGlobalError(errorMsg);
+    // Auto-clear global error after 5 seconds
+    setTimeout(() => setGlobalError(''), 5000);
+  };
+
+  // Global success handler
+  const showSuccess = (message) => {
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
 
   // Teacher management state
   const [teacherForm, setTeacherForm] = useState({
