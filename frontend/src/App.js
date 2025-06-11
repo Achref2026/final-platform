@@ -359,24 +359,58 @@ function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
     
     try {
       const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-      const payload = authMode === 'login' 
-        ? { email: authData.email, password: authData.password }
-        : authData;
+      let response;
 
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
+      if (authMode === 'login') {
+        // Login uses JSON
+        const payload = { email: authData.email, password: authData.password };
+        response = await fetch(`${BACKEND_URL}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // Registration uses FormData
+        const formData = new FormData();
+        formData.append('email', authData.email);
+        formData.append('password', authData.password);
+        formData.append('first_name', authData.first_name);
+        formData.append('last_name', authData.last_name);
+        formData.append('phone', authData.phone);
+        formData.append('address', authData.address);
+        formData.append('date_of_birth', authData.date_of_birth);
+        formData.append('gender', authData.gender);
+        formData.append('state', authData.state);
+
+        response = await fetch(`${BACKEND_URL}${endpoint}`, {
+          method: 'POST',
+          body: formData // No Content-Type header for FormData
+        });
+      }
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+              errorMessage = errorData.detail.map(err => err.msg).join(', ');
+            } else {
+              errorMessage = errorData.detail;
+            }
+          }
+        } catch {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -385,9 +419,13 @@ function App() {
         localStorage.setItem('auth_token', data.access_token);
         localStorage.setItem('user_data', JSON.stringify(data.user));
         setUser(data.user);
-        setShowAuthModal(false);
+        setSuccessMessage(`${authMode === 'login' ? t.login : t.register} successful!`);
         
-        alert(`${authMode === 'login' ? t.login : t.register} successful!`);
+        // Close modal after a brief delay to show success message
+        setTimeout(() => {
+          setShowAuthModal(false);
+          setSuccessMessage('');
+        }, 1500);
         
         // Reset form
         setAuthData({
@@ -398,12 +436,13 @@ function App() {
           phone: '',
           address: '',
           date_of_birth: '',
-          gender: 'male'
+          gender: 'male',
+          state: ''
         });
       }
     } catch (error) {
       console.error('Auth error:', error);
-      alert(`${authMode === 'login' ? t.login : t.register} failed: ${error.message}`);
+      setErrorMessage(`${authMode === 'login' ? t.login : t.register} failed: ${error.message}`);
     } finally {
       setAuthLoading(false);
     }
