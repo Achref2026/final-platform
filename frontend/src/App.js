@@ -628,7 +628,18 @@ function App() {
 
       if (response.ok) {
         const data = await response.json();
-        alert(data.message);
+        
+        // Show detailed message with login info
+        let message = data.message;
+        if (data.login_info) {
+          if (data.login_info.temporary_password) {
+            message += `\n\nLogin Credentials:\nEmail: ${data.login_info.email}\nTemporary Password: ${data.login_info.temporary_password}\n\n${data.login_info.message}`;
+          } else {
+            message += `\n\n${data.login_info.message}`;
+          }
+        }
+        
+        alert(message);
         setShowTeacherModal(false);
         setTeacherForm({
           email: '',
