@@ -10,7 +10,7 @@ import os
 from io import BytesIO
 
 class AlgerianDrivingSchoolTester:
-    def __init__(self, base_url="https://489a6cd0-789c-4508-9d21-ba86cb418ff1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://88e24847-21a1-4ad1-8a28-baf9a55d65c9.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
@@ -22,6 +22,7 @@ class AlgerianDrivingSchoolTester:
         self.course_id = None
         self.session_id = None
         self.document_id = None
+        self.teacher_credentials = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, headers=None):
         """Run a single API test"""
