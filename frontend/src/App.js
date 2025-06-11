@@ -2005,6 +2005,25 @@ function App() {
               </button>
             </div>
             
+            {/* Error and Success Messages */}
+            {errorMessage && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center">
+                  <div className="text-red-600 mr-2">❌</div>
+                  <div className="text-red-800 text-sm">{errorMessage}</div>
+                </div>
+              </div>
+            )}
+            
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center">
+                  <div className="text-green-600 mr-2">✅</div>
+                  <div className="text-green-800 text-sm">{successMessage}</div>
+                </div>
+              </div>
+            )}
+            
             <form onSubmit={handleAuth} className="space-y-4">
               <div className="form-group">
                 <label className="form-label">{t.email}</label>
